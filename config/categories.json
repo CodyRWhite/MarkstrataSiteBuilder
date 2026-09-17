@@ -1,2 +1,4 @@
-[
-]
+{
+  "_comment": "Optional TEMPLATE. Copied to %LOCALAPPDATA%\\MarkstrataSiteBuilder\\categories.json the first time the module needs it - edit that copy, not this one, which is replaced when the module is updated. It lists the display name of each top-level folder, in the order the menu and the home index should show them. Its main use is punctuation: SharePoint will not take '&' in a path, so the folder is called 'Gamma and Delta' while the menu should read 'Gamma & Delta'. A folder named in no entry keeps its own name and sorts after the listed ones, A-Z, so the file may be left empty. A bare array is accepted too.",
+  "categories": []
+}

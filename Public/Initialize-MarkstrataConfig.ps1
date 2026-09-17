@@ -9,6 +9,10 @@ function Initialize-MarkstrataConfig {
         shipped defaults - so the module can be updated or reinstalled without taking your
         configuration with it, and nothing of yours lives in the module folder.
 
+        The same folder holds the other two files you may edit, categories.json and
+        category-groups.json. Both are created there from the module's templates by this command,
+        so an installed module never has to be written to and an update cannot take them with it.
+
         Called with no parameters in an interactive session it asks for what it needs, showing the
         current value as the default so re-running it is a way to review rather than retype.
         Called with parameters it just sets those, which is what a scripted setup wants.
@@ -59,7 +63,8 @@ function Initialize-MarkstrataConfig {
         Thumbprint of that app's certificate in CurrentUser\My, for unattended runs.
 
     .PARAMETER Show
-        Print the effective configuration and the file it came from, changing nothing.
+        Print the effective configuration and the files it came from, changing nothing - including
+        creating none of them.
 
     .OUTPUTS
         PSCustomObject describing the effective settings and the path they were written to.
@@ -78,7 +83,8 @@ function Initialize-MarkstrataConfig {
     .EXAMPLE
         Initialize-MarkstrataConfig -Show
 
-        Review what is configured and where it is stored.
+        Review what is configured and where it is stored - the config override, the category list
+        and the menu groups, all under %LOCALAPPDATA%\MarkstrataSiteBuilder.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([pscustomobject])]
@@ -97,10 +103,18 @@ function Initialize-MarkstrataConfig {
 
     $config = Get-MarkstrataConfig -Force
 
+    $categoryFileName = [string](Get-OptionalProperty $config.Categories "listFile" "categories.json")
+    $groupFileName    = [string](Get-OptionalProperty $config.Navigation "groupFile" "category-groups.json")
+
     if ($Show) {
+        # -Show reports; it does not seed. The paths are where the files belong, whether or not
+        # they are there yet.
         return [pscustomobject]@{
             ConfigPath               = $script:UserOverride
             ConfigExists             = (Test-Path -LiteralPath $script:UserOverride)
+            DataFolder               = $script:DataRoot
+            CategoryFile             = (Get-MarkstrataDataPath -Name $categoryFileName)
+            CategoryGroupFile        = (Get-MarkstrataDataPath -Name $groupFileName)
             SiteUrl                  = [string]$config.SharePoint.siteUrl
             LibraryRoot              = [string]$config.Markdown.libraryRoot
             LibraryServerRelativeUrl = [string]$config.Markdown.libraryServerRelativeUrl
@@ -147,6 +161,18 @@ function Initialize-MarkstrataConfig {
         return [pscustomobject]@{ ConfigPath = $script:UserOverride; Updated = @(); Status = "WhatIf" }
     }
 
+    # Put the editable JSON files where the user can actually edit them. Seeded from the module's
+    # templates on first run, they then belong to the user's profile: an installed module folder is
+    # read-only in practice and is replaced wholesale by the next update.
+    $categoryFile = Resolve-MarkstrataDataFile -Name $categoryFileName
+    $groupFile    = Resolve-MarkstrataDataFile -Name $groupFileName
+
+    # Either file may have just appeared, and a session that read them before would otherwise carry
+    # on with what it cached.
+    $script:CategoryData      = $null
+    $script:CategoryGroupData = $null
+    $script:CategoryGroupFile = $null
+
     $written = [System.Collections.Generic.List[string]]::new()
 
     $sharePointValues = @{}
@@ -182,6 +208,9 @@ function Initialize-MarkstrataConfig {
     $config = Get-MarkstrataConfig -Force
     return [pscustomobject]@{
         ConfigPath               = $script:UserOverride
+        DataFolder               = $script:DataRoot
+        CategoryFile             = $categoryFile
+        CategoryGroupFile        = $groupFile
         SiteUrl                  = [string]$config.SharePoint.siteUrl
         LibraryRoot              = [string]$config.Markdown.libraryRoot
         LibraryServerRelativeUrl = [string]$config.Markdown.libraryServerRelativeUrl

@@ -1,5 +1,5 @@
 {
-  "_comment": "Optional. Themed groups for the top level of the menu, used when navigation.useGroups is true. Each group becomes one non-clickable heading that opens a mega menu of its categories. Keep the list short - a SharePoint header bar shows about five or six entries before it starts hiding the rest behind a '...' overflow. Categories are listed by their DISPLAY name (see categories.json); any category not named in a group falls into defaultGroup. Delete the sample groups and write your own.",
+  "_comment": "Optional TEMPLATE. Copied to %LOCALAPPDATA%\\MarkstrataSiteBuilder\\category-groups.json the first time the module needs it - edit that copy, not this one, which is replaced when the module is updated. Themed groups for the top level of the menu, used when navigation.useGroups is true. Each group becomes one non-clickable heading that opens a mega menu of its categories. Keep the list short - a SharePoint header bar shows about five or six entries before it starts hiding the rest behind a '...' overflow. Categories are listed by their DISPLAY name (see categories.json); any category not named in a group falls into defaultGroup. Delete the sample groups and write your own.",
   "defaultGroup": "Other",
   "groups": [
     {

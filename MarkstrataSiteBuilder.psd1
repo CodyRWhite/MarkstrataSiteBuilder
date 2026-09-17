@@ -8,7 +8,7 @@
     RootModule        = 'MarkstrataSiteBuilder.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.1.0'
 
     # ID used to uniquely identify this module
     GUID              = 'c7f0a9b4-3d21-4a6e-9f18-2b5c6d8e4a10'
@@ -69,6 +69,14 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+1.1.0
+- categories.json and category-groups.json are read from, and created in,
+  %LOCALAPPDATA%\MarkstrataSiteBuilder. In a module folder they could not be
+  edited by the person who needed to edit them, and an update replaced them.
+- Update-MarkstrataPageSetting -UpdateConfig records the web part settings in the
+  per-user config override instead of rewriting the module's shipped config.
+- The module folder is only ever read.
+
 1.0.0
 - First public release.
 - One renderer page serves the whole library through a strataDoc query string.
