@@ -3,8 +3,9 @@
     folder name into the name people see, and back again.
 
     SharePoint will not take "&" in a path, so a category whose name contains one has to live in a
-    folder spelled differently ("Gamma & Delta" -> "Gamma and Delta"). config/categories.json
-    holds the display names, in menu order, and the slug rule below is what maps between the two.
+    folder spelled differently ("Gamma & Delta" -> "Gamma and Delta"). categories.json, in
+    %LOCALAPPDATA%\MarkstrataSiteBuilder, holds the display names in menu order, and the slug rule
+    below is what maps between the two.
 #>
 
 function Get-MarkstrataCategoryList {
@@ -13,10 +14,14 @@ function Get-MarkstrataCategoryList {
         Load and cache the ordered list of category display names.
 
     .DESCRIPTION
-        config/categories.json (categories.listFile) is a JSON array of display names, in the order
-        they should appear. It is OPTIONAL: a library whose folder names are already what you want
-        shown, in alphabetical order, needs no file at all - every folder then falls back to its
-        own name.
+        categories.json (categories.listFile) is a JSON array of display names, in the order they
+        should appear. It lives in the data folder, %LOCALAPPDATA%\MarkstrataSiteBuilder, and is
+        seeded there from the module's template the first time it is read - the module folder is
+        read-only once installed and is replaced on update, so an edit there would not survive.
+        Set categories.listFile to a full path to keep the file somewhere else entirely.
+
+        It is OPTIONAL: a library whose folder names are already what you want shown, in
+        alphabetical order, needs no file at all - every folder then falls back to its own name.
 
     .PARAMETER Force
         Re-read from disk instead of using the session cache.
@@ -34,7 +39,7 @@ function Get-MarkstrataCategoryList {
     $list = [System.Collections.Generic.List[string]]::new()
 
     $listFileName = [string](Get-OptionalProperty $config.Categories "listFile" "categories.json")
-    $listPath = Join-Path $script:ConfigRoot $listFileName
+    $listPath = Resolve-MarkstrataDataFile -Name $listFileName
     if (Test-Path -LiteralPath $listPath) {
         $raw = Get-Content -LiteralPath $listPath -Raw -Encoding UTF8 | ConvertFrom-Json
         # Accept either a bare array or an object with a "categories" array, so the file can carry

@@ -4,8 +4,10 @@ function Get-MarkstrataConfig {
         Resolve and cache the effective configuration.
 
     .DESCRIPTION
-        Loads config\MarkstrataSiteBuilder.config.json (the shipped defaults) and layers the
-        per-user override from %LOCALAPPDATA%\MarkstrataSiteBuilder\config.json on top.
+        Loads the shipped defaults from the module's own config\MarkstrataSiteBuilder.config.json
+        and layers the per-user override from %LOCALAPPDATA%\MarkstrataSiteBuilder\config.json on
+        top. The shipped file is only ever READ - it lives in the module folder, which an installed
+        module cannot write to and which a module update replaces.
         Override values win section by section: within each top-level section any non-empty
         property in the override replaces the default. Documentation keys beginning '_' are
         ignored everywhere.
@@ -45,7 +47,7 @@ function Get-MarkstrataConfig {
         return $table
     }
 
-    $defaults = Read-JsonFile (Join-Path $script:ConfigRoot "MarkstrataSiteBuilder.config.json")
+    $defaults = Read-JsonFile (Join-Path $script:TemplateRoot "MarkstrataSiteBuilder.config.json")
 
     # Build each top-level section as a hashtable so the user override can be layered in.
     $sections = [ordered]@{}

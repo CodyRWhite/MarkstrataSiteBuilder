@@ -8,8 +8,13 @@ function Get-MarkstrataCategoryGroup {
         overflow and become invisible. The menu's top level is therefore a handful of groups, each
         opening a mega menu of its categories.
 
-        Groups come from config/category-groups.json (navigation.groupFile) in file order. A
-        category present in the library but missing from every group is placed in defaultGroup
+        Groups come from category-groups.json (navigation.groupFile) in file order. The file lives
+        in the data folder, %LOCALAPPDATA%\MarkstrataSiteBuilder, and is seeded there from the
+        module's template the first time it is read: the module folder is read-only once installed
+        and is replaced on update, so an edit there would not survive. Set navigation.groupFile to
+        a full path to keep the file somewhere else entirely.
+
+        A category present in the library but missing from every group is placed in defaultGroup
         rather than dropped, so adding a category folder can never silently remove it from the menu.
 
         Group membership is matched on the category DISPLAY name ("Gamma & Delta"), not the folder
@@ -37,11 +42,12 @@ function Get-MarkstrataCategoryGroup {
     if (-not $script:CategoryGroupData -or $Force) {
         $config = Get-MarkstrataConfig
         $groupFileName = [string](Get-OptionalProperty $config.Navigation "groupFile" "category-groups.json")
-        $groupPath = Join-Path $script:ConfigRoot $groupFileName
+        $groupPath = Resolve-MarkstrataDataFile -Name $groupFileName
         if (-not (Test-Path -LiteralPath $groupPath)) {
-            throw "Category group file not found: $groupPath"
+            throw "Category group file not found: $groupPath. Run Initialize-MarkstrataConfig to create it, or set navigation.useGroups to false."
         }
         $script:CategoryGroupData = Get-Content -LiteralPath $groupPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $script:CategoryGroupFile = $groupPath
     }
     $groupData = $script:CategoryGroupData
     $defaultGroup = [string](Get-OptionalProperty $groupData "defaultGroup" "Reference")
@@ -65,6 +71,9 @@ function Get-MarkstrataCategoryGroup {
     }
 
     # Anything the config never mentions lands in the default group rather than vanishing.
+    # The cache may have been filled by an earlier call (or injected by the tests), so the file it
+    # came from is remembered rather than re-resolved.
+    $groupSource = if ($script:CategoryGroupFile) { $script:CategoryGroupFile } else { "the category group file" }
     $orphans = @($present | Where-Object { -not $assigned.Contains($_) } | Sort-Object)
     if ($orphans.Count -gt 0) {
         $target = $result | Where-Object { $_.Name -eq $defaultGroup } | Select-Object -First 1
@@ -74,7 +83,7 @@ function Get-MarkstrataCategoryGroup {
         }
         foreach ($orphan in $orphans) {
             $target.Categories.Add($orphan)
-            Write-MarkstrataLog -Message "Category '$orphan' is in no group; placed in '$defaultGroup'. Add it to config/category-groups.json to place it deliberately." -Level Warning -Component "Navigation" -NoConsole
+            Write-MarkstrataLog -Message "Category '$orphan' is in no group; placed in '$defaultGroup'. Add it to $groupSource to place it deliberately." -Level Warning -Component "Navigation" -NoConsole
         }
     }
 

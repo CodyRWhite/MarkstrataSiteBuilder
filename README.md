@@ -70,7 +70,8 @@ Initialize-MarkstrataConfig
 It asks for the site URL, the local folder holding your Markdown, and what the home page should
 be called. Everything else has a working default. Settings are written to
 `%LOCALAPPDATA%\MarkstrataSiteBuilder\config.json`, never to the module folder, so updating the
-module does not take your configuration with it.
+module does not take your configuration with it - and an installed module, which normally sits
+somewhere you cannot write to, never needs to be written to at all.
 
 The local folder is normally a **synced** copy of the SharePoint library (Documents → Sync in the
 browser). That is the whole authoring model: edit a file in your editor, save, and OneDrive
@@ -143,7 +144,8 @@ or `Invoke-MarkstrataRefresh` for both plus the renderer.
 
 ### Organising the menu
 
-Two optional files in `config/`:
+Two optional files in `%LOCALAPPDATA%\MarkstrataSiteBuilder`, created there from the module's
+templates by `Initialize-MarkstrataConfig` (or the first time anything reads them):
 
 | File | What it does | If you leave it empty |
 | --- | --- | --- |
@@ -152,6 +154,10 @@ Two optional files in `config/`:
 
 `categories.json` exists mainly for punctuation: SharePoint will not take `&` in a path, so a
 category folder has to be called `Gamma and Delta` while the menu should read `Gamma & Delta`.
+
+`Initialize-MarkstrataConfig -Show` prints both paths. To keep either file somewhere else - a
+network folder a team shares, or a repository - put a full path in `categories.listFile` or
+`navigation.groupFile`.
 
 ### Images
 
@@ -226,6 +232,12 @@ Every command has full help: `Get-Help Publish-MarkstrataLibrary -Full`.
 - **A document must not share its category folder's name** - it would collide with the generated
   index for that category.
 - **Group headings are not clickable** and have no page of their own.
+- **Nothing is ever written to the module folder.** Your configuration, the category list and the
+  menu groups all live in `%LOCALAPPDATA%\MarkstrataSiteBuilder`; the `config/` folder inside the
+  module holds the shipped defaults and the templates those files are seeded from, and is only
+  ever read. That is what makes an installation under `Program Files`, or any module folder you
+  have no write access to, work the same as a repository checkout - and what keeps a module update
+  from taking your settings with it.
 - **Every run writes a log.** One file per run, never overwritten, in
   `%APPDATA%\MarkstrataSiteBuilder\logs`, named
   `MarkstrataSiteBuilder_<yyyyMMdd_HHmmss>_<pid>.log`. It opens in CMTrace or OneTrace with
@@ -245,6 +257,11 @@ Invoke-Pester -Path .\tests
 The tests are offline. They run against a configuration injected into module scope, not against
 the shipped config or your own, so a passing suite says something about the code rather than
 about the tenant it was run in.
+
+Imported from a checkout, the module still reads `categories.json` and `category-groups.json` from
+`%LOCALAPPDATA%\MarkstrataSiteBuilder` - `config/` holds the templates they are seeded from, not
+the live files. To work on them in place, point `categories.listFile` and `navigation.groupFile` at
+full paths inside the checkout.
 
 ## Licence
 

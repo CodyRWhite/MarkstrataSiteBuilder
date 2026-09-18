@@ -128,7 +128,10 @@ Describe 'Public surface includes the Markdown pipeline' {
         # way it divides its documentation. Shipping either would leak that and build a stranger's
         # menu out of somebody else's org chart.
         $configRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'config'
-        @((Get-Content (Join-Path $configRoot 'categories.json') -Raw | ConvertFrom-Json)).Count | Should -Be 0
+        $categories = Get-Content (Join-Path $configRoot 'categories.json') -Raw | ConvertFrom-Json
+        # Either shape is accepted by the loader: a bare array, or an object carrying a "_comment".
+        $listed = if ($categories -is [array]) { $categories } else { @($categories.categories) }
+        @($listed).Count | Should -Be 0
 
         $groups = Get-Content (Join-Path $configRoot 'category-groups.json') -Raw | ConvertFrom-Json
         foreach ($group in $groups.groups) {
@@ -545,6 +548,103 @@ Describe 'Convert-MarkstrataLink' {
         $text = Get-Content $script:Subject -Raw
         $text | Should -Match '\[Read Page One\]\(/sites/docs/SitePages/Docs/Alpha/Section/Page%20One\.aspx\)'
         $text | Should -Not -Match '\[\['
+    }
+}
+
+Describe 'Editable files live under the user profile' {
+    # An installed module folder is read-only in practice - a machine-wide install is not writable
+    # by the person running the commands, and any install is replaced by the next update. Every
+    # file the user edits, and every file a command writes, therefore belongs in the data folder.
+    BeforeAll {
+        $script:DataProbe    = Join-Path $TestDrive 'appdata'
+        $script:SavedState   = & $script:Module {
+            [pscustomobject]@{
+                DataRoot     = $script:DataRoot
+                UserOverride = $script:UserOverride
+                Config       = $script:Config
+                CategoryData = $script:CategoryData
+            }
+        }
+        & $script:Module {
+            param($Root)
+            $script:DataRoot     = $Root
+            $script:UserOverride = Join-Path $Root 'config.json'
+        } $script:DataProbe
+    }
+
+    AfterAll {
+        & $script:Module {
+            param($State)
+            $script:DataRoot     = $State.DataRoot
+            $script:UserOverride = $State.UserOverride
+            $script:Config       = $State.Config
+            $script:CategoryData = $State.CategoryData
+        } $script:SavedState
+    }
+
+    It 'seeds a missing data file into the data folder, leaving the shipped template alone' {
+        $template = Join-Path (Split-Path -Parent $PSScriptRoot) 'config/category-groups.json'
+        $before = Get-Content -LiteralPath $template -Raw
+
+        $resolved = & $script:Module { Resolve-MarkstrataDataFile -Name 'category-groups.json' }
+
+        $resolved | Should -Be (Join-Path $script:DataProbe 'category-groups.json')
+        Test-Path -LiteralPath $resolved | Should -BeTrue
+        (Get-Content -LiteralPath $template -Raw) | Should -Be $before
+    }
+
+    It 'leaves a file the user has already edited exactly as it is' {
+        New-Item -ItemType Directory -Force -Path $script:DataProbe | Out-Null
+        $path = Join-Path $script:DataProbe 'categories.json'
+        Set-Content -LiteralPath $path -Value '["Alpha","Beta"]' -Encoding utf8NoBOM
+
+        $resolved = & $script:Module { Resolve-MarkstrataDataFile -Name 'categories.json' }
+
+        $resolved | Should -Be $path
+        (Get-Content -LiteralPath $path -Raw) | Should -Match 'Alpha'
+    }
+
+    It 'reads the category list from the data folder rather than the module folder' {
+        New-Item -ItemType Directory -Force -Path $script:DataProbe | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:DataProbe 'categories.json') `
+            -Value '["Omega","Sigma"]' -Encoding utf8NoBOM
+
+        $list = & $script:Module { (Get-MarkstrataCategoryList -Force).List }
+
+        @($list) | Should -Be @('Omega', 'Sigma')
+    }
+
+    It 'honours a full path, so a data file can be kept anywhere' {
+        # A shared team copy, or a repository checkout, rather than the data folder.
+        $elsewhere = Join-Path $TestDrive 'elsewhere/categories.json'
+        $resolved = & $script:Module { param($Path) Resolve-MarkstrataDataFile -Name $Path } $elsewhere
+        $resolved | Should -Be $elsewhere
+    }
+
+    It 'writes settings, nested ones included, to the override in the data folder' {
+        # What Update-MarkstrataPageSetting -UpdateConfig records. It used to rewrite the shipped
+        # config inside the module folder, which an installed module cannot write to.
+        & $script:Module {
+            Set-MarkstrataUserConfig -Section 'markdownPage' -Values @{
+                webPartProperties = [pscustomobject]@{ contentSource = 'library'; theme = 'dark' }
+            } -Confirm:$false | Out-Null
+        }
+
+        $overridePath = Join-Path $script:DataProbe 'config.json'
+        Test-Path -LiteralPath $overridePath | Should -BeTrue
+        $written = Get-Content -LiteralPath $overridePath -Raw | ConvertFrom-Json
+        $written.markdownPage.webPartProperties.theme | Should -Be 'dark'
+    }
+
+    It 'names the module folder only where the shipped defaults are read' {
+        # A regression guard: anything else touching the module folder is a file the user is
+        # expected to edit, or a write, in a place that will not survive an update.
+        $root = Split-Path -Parent $PSScriptRoot
+        $referring = Get-ChildItem -Path (Join-Path $root 'Public'), (Join-Path $root 'Private') -Filter '*.ps1' -File |
+            Where-Object { (Get-Content -LiteralPath $_.FullName -Raw) -match '\$script:(ModuleRoot|TemplateRoot)' } |
+            ForEach-Object { $_.Name } | Sort-Object
+
+        @($referring) | Should -Be @('Get-MarkstrataConfig.ps1', 'MarkstrataDataFile.ps1')
     }
 }
 

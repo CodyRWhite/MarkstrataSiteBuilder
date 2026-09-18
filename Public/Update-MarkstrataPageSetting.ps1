@@ -23,8 +23,8 @@ function Update-MarkstrataPageSetting {
         (markdownIndex.homeFileName under the page root), which is the template by convention.
 
     .PARAMETER UpdateConfig
-        Also write the settings back into config/MarkstrataSiteBuilder.config.json, so pages
-        built later start out matching. Without this the config drifts behind the site.
+        Also record the settings in your own config, %LOCALAPPDATA%\MarkstrataSiteBuilder\config.json,
+        so pages built later start out matching. Without this the config drifts behind the site.
 
     .PARAMETER PassThru
         Emit one object per page instead of only the summary.
@@ -139,9 +139,7 @@ function Update-MarkstrataPageSetting {
     $stopwatch.Stop()
     Write-Progress -Activity "Applying page settings" -Completed
 
-    if ($UpdateConfig -and $PSCmdlet.ShouldProcess("config/MarkstrataSiteBuilder.config.json", "Record web part settings")) {
-        $configPath = Join-Path $script:ConfigRoot "MarkstrataSiteBuilder.config.json"
-        $raw = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($UpdateConfig -and $PSCmdlet.ShouldProcess($script:UserOverride, "Record web part settings")) {
         $stored = [ordered]@{}
         foreach ($key in $rendering.Keys) { $stored[$key] = $rendering[$key] }
         # contentSource and fileUrl are excluded from the per-page MERGE (each page keeps its own),
@@ -149,9 +147,11 @@ function Update-MarkstrataPageSetting {
         # so config keeps recording them.
         $stored["contentSource"] = if ($templateProperties.PSObject.Properties.Name -contains "contentSource") { $templateProperties.contentSource } else { "library" }
         $stored["fileUrl"] = ""
-        $raw.markdownPage.webPartProperties = [pscustomobject]$stored
-        $raw | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
-        Write-MarkstrataLog -Message "Recorded $($rendering.Count) rendering property(ies) into config." -Component "PageSetting"
+        # Written to the per-user override, not to the module's shipped config: that file sits in
+        # the module folder, which an installed module has no right to write to and which the next
+        # module update replaces anyway.
+        Set-MarkstrataUserConfig -Section "markdownPage" -Values @{ webPartProperties = [pscustomobject]$stored } -Confirm:$false | Out-Null
+        Write-MarkstrataLog -Message "Recorded $($rendering.Count) rendering property(ies) into $script:UserOverride." -Component "PageSetting"
     }
 
     Write-MarkstrataLog -Message ("Page settings complete: {0} applied, {1} already matching, {2} failed in {3:mm\:ss}." -f $applied, $unchanged, $failed, $stopwatch.Elapsed) -Component "PageSetting"
