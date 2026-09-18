@@ -1,0 +1,101 @@
+# Offline checks for MarkstrataSiteBuilder: the Pester suite and the linter, the same two
+# commands the README asks a contributor to run. Nothing here touches SharePoint - the tests run
+# against a configuration injected into module scope - so no secret is needed and no tenant is
+# reachable from a pull request.
+#
+# Windows is the only runner. The module builds Windows paths (%LOCALAPPDATA%, %APPDATA%) and
+# talks to SharePoint Online through PnP.PowerShell, so a green run has to mean green on the
+# platform people actually use it from.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push to the same branch makes the first run's answer stale.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pester
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Cache PowerShell modules
+        # PnP.PowerShell is a large install and the slowest step in the job by far.
+        uses: actions/cache@v4
+        with:
+          path: ~\Documents\PowerShell\Modules
+          key: psmodules-${{ runner.os }}-${{ hashFiles('MarkstrataSiteBuilder.psd1', '.github/workflows/ci.yml') }}
+          restore-keys: psmodules-${{ runner.os }}-
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          # PnP.PowerShell is a RequiredModules entry in the manifest, so importing the module -
+          # which every test does - fails without it, offline suite or not.
+          foreach ($dependency in @(
+              @{ Name = 'Pester';           MinimumVersion = '5.5.0' },
+              @{ Name = 'PnP.PowerShell';   MinimumVersion = '3.0.0' })) {
+              if (Get-Module -ListAvailable -Name $dependency.Name |
+                      Where-Object { $_.Version -ge [version]$dependency.MinimumVersion }) {
+                  Write-Host "$($dependency.Name) already present (cache hit)."
+                  continue
+              }
+              Write-Host "Installing $($dependency.Name)..."
+              Install-Module @dependency -Scope CurrentUser -Force -AllowClobber -SkipPublisherCheck
+          }
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          # -CI sets the exit code from the result and writes testResults.xml.
+          Invoke-Pester -Path ./tests -CI
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: testResults.xml
+          if-no-files-found: warn
+
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          # The repository's own settings decide severity and exclusions; this job only reports
+          # what they select and fails if there is anything to report.
+          $findings = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1)
+          if ($findings.Count -eq 0) {
+              Write-Host 'No findings.'
+              return
+          }
+          $findings | Format-Table -AutoSize Severity, RuleName, ScriptName, Line, Message
+          throw "PSScriptAnalyzer reported $($findings.Count) finding(s)."

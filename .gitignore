@@ -1,0 +1,2 @@
+# Pester writes this when run with -CI (as the CI workflow does).
+testResults.xml
