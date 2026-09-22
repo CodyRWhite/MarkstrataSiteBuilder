@@ -16,6 +16,8 @@ function Test-MarkstrataAccess {
           Documents     the Markdown library, its server-relative path, and how many .md files
                         SharePoint can currently see
           Local library the folder on this machine, if one is configured
+          Index naming  whether the generated index names end in an extension the library walk
+                        accepts, since a mismatch silently stops them being treated as indexes
           Web part      whether the CONFIGURED component (markdownPage.componentId) is available
                         on this site, since a page built without it renders an empty canvas while
                         reporting success
@@ -51,6 +53,7 @@ function Test-MarkstrataAccess {
     }
 
     $config = Get-MarkstrataConfig
+    $documentExtensions = Get-MarkstrataDocumentExtension
     $checks = [System.Collections.Generic.List[object]]::new()
     $documentCount = 0
 
@@ -100,7 +103,7 @@ function Test-MarkstrataAccess {
     try {
         $libraryTitle = [string]$config.Markdown.documentLibrary
         $documents = @(Get-PnPListItem -List $libraryTitle -PageSize 1000 -ErrorAction Stop |
-            Where-Object { [string]$_.FieldValues.FileLeafRef -like "*.md" })
+            Where-Object { Test-MarkstrataDocumentFile -Name ([string]$_.FieldValues.FileLeafRef) -Extension $documentExtensions })
         $documentCount = $documents.Count
         if ($documentCount -eq 0) {
             & $record "Document library" "Warn" "'$libraryTitle' is reachable but holds no .md files yet."
@@ -135,11 +138,31 @@ function Test-MarkstrataAccess {
         & $record "Local library" "Warn" "markdown.libraryRoot is not set. Index generation and link conversion work on local files and need it."
     }
     elseif (Test-Path -LiteralPath $libraryRoot) {
-        $localCount = @(Get-ChildItem -LiteralPath $libraryRoot -Filter "*.md" -File -Recurse -ErrorAction SilentlyContinue).Count
+        $localCount = @(Get-ChildItem -LiteralPath $libraryRoot -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { Test-MarkstrataDocumentFile -Name $_.Name -Extension $documentExtensions }).Count
         & $record "Local library" "Pass" "$libraryRoot holds $localCount Markdown document(s)."
     }
     else {
         & $record "Local library" "Fail" "$libraryRoot does not exist on this machine."
+    }
+
+    # ---- Index naming -------------------------------------------------------------------------
+    # The index screens are documents like any other, so their names have to end in an extension
+    # the library's own walk accepts. A mismatch is silent and awkward: the indexes are written and
+    # published, but "is this the category's index?" answers no everywhere, so they are titled and
+    # ordered as ordinary documents and the category headings go missing.
+    $indexNames = @(
+        [string](Get-OptionalProperty $config.MarkdownIndex "indexFileName" "{Category}.md")
+        [string](Get-OptionalProperty $config.MarkdownIndex "homeFileName" "Home.md")
+    )
+    $mismatched = @($indexNames |
+        Where-Object { $_ } |
+        Where-Object { $documentExtensions -notcontains [System.IO.Path]::GetExtension($_).ToLowerInvariant() })
+    if ($mismatched.Count -gt 0) {
+        & $record "Index naming" "Fail" "$($mismatched -join ' and ') do not end in one of markdown.documentExtensions ($($documentExtensions -join ', ')), so the generated indexes would not be recognised as indexes."
+    }
+    else {
+        & $record "Index naming" "Pass" "Index and home file names match markdown.documentExtensions ($($documentExtensions -join ', '))."
     }
 
     # ---- The web part -------------------------------------------------------------------------

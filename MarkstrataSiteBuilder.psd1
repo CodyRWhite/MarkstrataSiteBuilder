@@ -8,7 +8,7 @@
     RootModule        = 'MarkstrataSiteBuilder.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.4.0'
+    ModuleVersion     = '1.5.0'
 
     # ID used to uniquely identify this module
     GUID              = 'c7f0a9b4-3d21-4a6e-9f18-2b5c6d8e4a10'
@@ -69,6 +69,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+1.5.0
+- markdown.documentExtensions: the publish walk, the menu, the sync wait and the
+  readiness check follow it, so a library of .html documents works. A new
+  readiness check catches index names that do not match it.
+
 1.4.0
 - Invoke-MarkstrataRefresh builds the renderer instead of a page per document,
   and no longer sets the site's welcome page on every run. -KeepOrphan is gone;

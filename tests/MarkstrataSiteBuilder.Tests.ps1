@@ -1168,6 +1168,81 @@ Describe 'Invoke-MarkstrataRefresh rebuilds for the renderer model' {
     }
 }
 
+Describe 'Document discovery is extension-aware' {
+    # The HTML component loads .html and .htm; the Markdown one loads .md. The walkers used to test
+    # for "*.md" in four places, so an HTML library published nothing at all.
+    BeforeAll {
+        # StrictMode throws on a property the fixture does not have, which is exactly the case
+        # being saved here - hence the module's own optional-property helper.
+        $script:ExtState = & $script:Module { Get-OptionalProperty $script:Config.Markdown "documentExtensions" $null }
+    }
+
+    AfterAll {
+        & $script:Module {
+            param($Original)
+            if ($null -eq $Original) {
+                [void]$script:Config.Markdown.PSObject.Properties.Remove('documentExtensions')
+            }
+            else {
+                $script:Config.Markdown | Add-Member -NotePropertyName documentExtensions -NotePropertyValue $Original -Force
+            }
+        } $script:ExtState
+    }
+
+    It 'defaults to .md when nothing is configured' {
+        & $script:Module { [void]$script:Config.Markdown.PSObject.Properties.Remove('documentExtensions') }
+        $extensions = & $script:Module { Get-MarkstrataDocumentExtension }
+        @($extensions) | Should -Be @('.md')
+    }
+
+    It 'normalises case and a missing dot' {
+        & $script:Module {
+            $script:Config.Markdown | Add-Member -NotePropertyName documentExtensions -NotePropertyValue @('HTML', '.Htm') -Force
+        }
+        $extensions = & $script:Module { Get-MarkstrataDocumentExtension }
+        @($extensions) | Should -Be @('.html', '.htm')
+    }
+
+    It 'falls back rather than matching nothing when the list is empty' {
+        # An empty list would publish an empty site, which is worse than ignoring the setting.
+        & $script:Module {
+            $script:Config.Markdown | Add-Member -NotePropertyName documentExtensions -NotePropertyValue @() -Force
+        }
+        @(& $script:Module { Get-MarkstrataDocumentExtension }) | Should -Be @('.md')
+    }
+
+    It 'accepts the configured extensions and rejects the rest' {
+        $results = & $script:Module {
+            $script:Config.Markdown | Add-Member -NotePropertyName documentExtensions -NotePropertyValue @('.html', '.htm') -Force
+            $ext = Get-MarkstrataDocumentExtension
+            [pscustomobject]@{
+                Html     = Test-MarkstrataDocumentFile -Name 'Page One.html' -Extension $ext
+                Htm      = Test-MarkstrataDocumentFile -Name 'Page One.htm'  -Extension $ext
+                Markdown = Test-MarkstrataDocumentFile -Name 'Page One.md'   -Extension $ext
+                Image    = Test-MarkstrataDocumentFile -Name 'diagram.png'   -Extension $ext
+            }
+        }
+        $results.Html     | Should -BeTrue
+        $results.Htm      | Should -BeTrue
+        $results.Markdown | Should -BeFalse   # an .md file is not a document in an HTML library
+        $results.Image    | Should -BeFalse
+    }
+
+    It 'never treats a temporary or dot file as a document' {
+        $results = & $script:Module {
+            $ext = @('.md')
+            [pscustomobject]@{
+                Lock = Test-MarkstrataDocumentFile -Name '~$Page One.md' -Extension $ext
+                Dot  = Test-MarkstrataDocumentFile -Name '.hidden.md'    -Extension $ext
+                Real = Test-MarkstrataDocumentFile -Name 'Page One.md'   -Extension $ext
+            }
+        }
+        $results.Lock | Should -BeFalse
+        $results.Dot  | Should -BeFalse
+        $results.Real | Should -BeTrue
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }
