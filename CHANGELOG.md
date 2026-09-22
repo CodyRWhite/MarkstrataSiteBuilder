@@ -4,6 +4,31 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-22
+
+### Fixed
+- **A navigation rebuild forced the site's menu style to mega menu on every run.**
+  `navigation.megaMenu` defaulted to true and there was no switch to opt out, so
+  `Update-MarkstrataNavigation` - run to update menu LINKS - silently reverted any site an
+  administrator had deliberately switched to a cascading menu in the SharePoint UI. Nobody connected
+  the two, because the call used `-ErrorAction SilentlyContinue` and the command's output said
+  nothing about the style at all.
+
+  Rebuilding a menu's contents must never change its style. The style is now changed only when
+  asked for, by the new `-MegaMenu` and `-CascadingMenu` switches (mutually exclusive). With
+  neither, the current value is read, logged and left alone.
+
+### Changed
+- **`navigation.megaMenu` has been removed** and is no longer read. A key left in your own config is
+  ignored and warns, pointing at the switches. This is a behaviour change for anyone who has been
+  running `Update-MarkstrataNavigation`: the menu style was being set for them on every run, and now
+  it is not.
+- The navigation summary gained `MenuStyle`, reporting what the run did to the style - `Unchanged`,
+  `MegaMenu`, `CascadingMenu` or `Failed`. Not being able to tell from the output was half of what
+  made the original behaviour so hard to spot.
+- A failed style change now warns with the reason instead of being swallowed by
+  `-ErrorAction SilentlyContinue`. It still does not fail the rebuild.
+
 ## [1.2.0] - 2026-09-22
 
 ### Fixed

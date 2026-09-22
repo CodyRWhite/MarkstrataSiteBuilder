@@ -894,6 +894,107 @@ Describe 'User config merges into nested objects' {
     }
 }
 
+Describe 'Navigation rebuild and the menu style' {
+    # The regression: rebuilding the menu's CONTENTS forced the site's menu STYLE to mega menu on
+    # every run, with no switch to opt out and nothing in the output to say it had happened. An
+    # administrator who chose cascading in the SharePoint UI had it silently reverted by a routine
+    # rebuild run to update links.
+    BeforeAll {
+        $script:NavState = & $script:Module {
+            [pscustomobject]@{ Ready = $script:SharePointReady; Site = $script:SharePointSite }
+        }
+        & $script:Module {
+            $script:SharePointReady = $true
+            $script:SharePointSite = [pscustomobject]@{
+                Url = 'https://contoso.sharepoint.com/sites/docs'
+                ServerRelativeUrl = '/sites/docs'
+                Title = 'Docs'
+            }
+        }
+    }
+
+    AfterAll {
+        & $script:Module {
+            param($State)
+            $script:SharePointReady = $State.Ready
+            $script:SharePointSite = $State.Site
+        } $script:NavState
+    }
+
+    BeforeEach {
+        # One document is enough to get a rebuild that runs end to end - these tests are about the
+        # style, not the nodes. With useRendererLinks on, the menu is sourced from the document
+        # library, so this is what that walk expects to find.
+        Mock -CommandName Get-PnPListItem -ModuleName MarkstrataSiteBuilder -MockWith {
+            @([pscustomobject]@{
+                    FieldValues = @{
+                        FileLeafRef = 'Page One.md'
+                        FileRef     = '/sites/docs/Shared Documents/Alpha/Page One.md'
+                    }
+                })
+        }
+        Mock -CommandName Get-PnPNavigationNode -ModuleName MarkstrataSiteBuilder -MockWith { @() }
+        Mock -CommandName Remove-PnPNavigationNode -ModuleName MarkstrataSiteBuilder -MockWith { }
+        Mock -CommandName Add-PnPNavigationNode -ModuleName MarkstrataSiteBuilder -MockWith { [pscustomobject]@{ Id = 1 } }
+        Mock -CommandName Set-PnPHomePage -ModuleName MarkstrataSiteBuilder -MockWith { }
+        Mock -CommandName Set-PnPWeb -ModuleName MarkstrataSiteBuilder -MockWith { }
+        Mock -CommandName Get-PnPWeb -ModuleName MarkstrataSiteBuilder -MockWith {
+            [pscustomobject]@{ MegaMenuEnabled = $false; WelcomePage = 'SitePages/Home.aspx'; ServerRelativeUrl = '/sites/docs'; Title = 'Docs' }
+        }
+    }
+
+    It 'leaves the menu style alone when neither switch is passed' {
+        Update-MarkstrataNavigation -Confirm:$false | Out-Null
+        Should -Invoke Set-PnPWeb -ModuleName MarkstrataSiteBuilder -Times 0 -Exactly
+    }
+
+    It 'reports the style as Unchanged, so the output says what it did' {
+        # Half the original bug was that nothing in the output mentioned the style at all.
+        $result = Update-MarkstrataNavigation -Confirm:$false
+        $result.MenuStyle | Should -Be 'Unchanged'
+    }
+
+    It 'switches to a mega menu only when asked' {
+        $result = Update-MarkstrataNavigation -MegaMenu -Confirm:$false
+        Should -Invoke Set-PnPWeb -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly `
+            -ParameterFilter { $MegaMenuEnabled -eq $true }
+        $result.MenuStyle | Should -Be 'MegaMenu'
+    }
+
+    It 'switches to a cascading menu when asked' {
+        $result = Update-MarkstrataNavigation -CascadingMenu -Confirm:$false
+        Should -Invoke Set-PnPWeb -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly `
+            -ParameterFilter { $MegaMenuEnabled -eq $false }
+        $result.MenuStyle | Should -Be 'CascadingMenu'
+    }
+
+    It 'refuses both switches at once' {
+        { Update-MarkstrataNavigation -MegaMenu -CascadingMenu -Confirm:$false } |
+            Should -Throw -ExpectedMessage '*not both*'
+    }
+
+    It 'does NOT change the style because navigation.megaMenu is true in config' {
+        # THE test - the one that would have caught the original bug. navigation.megaMenu defaulted
+        # to true and forced the style on every run. The injected fixture carries megaMenu = $true,
+        # so this runs against exactly the configuration that used to revert an administrator's
+        # cascading menu, and asserts nothing happens.
+        $configured = & $script:Module { $script:Config.Navigation.megaMenu }
+        $configured | Should -BeTrue -Because 'the fixture must carry the legacy setting for this test to mean anything'
+
+        $result = Update-MarkstrataNavigation -Confirm:$false
+
+        Should -Invoke Set-PnPWeb -ModuleName MarkstrataSiteBuilder -Times 0 -Exactly
+        $result.MenuStyle | Should -Be 'Unchanged'
+    }
+
+    It 'reports a failed style change instead of failing the rebuild' {
+        Mock -CommandName Set-PnPWeb -ModuleName MarkstrataSiteBuilder -MockWith { throw 'Access denied' }
+        $result = Update-MarkstrataNavigation -MegaMenu -Confirm:$false
+        $result.MenuStyle | Should -Be 'Failed'
+        $result.Location | Should -Not -BeNullOrEmpty   # the rebuild still completed
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }

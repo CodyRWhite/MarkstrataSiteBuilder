@@ -231,7 +231,7 @@ Update-MarkstrataNavigation
 | `New-MarkstrataRenderer` | Create the single renderer page |
 | `New-MarkstrataIndex` | Generate the category and home indexes |
 | `Publish-MarkstrataLibrary` | Create a page per document (only if you want them) |
-| `Update-MarkstrataNavigation` | Rebuild the menu |
+| `Update-MarkstrataNavigation` | Rebuild the menu (contents only; `-MegaMenu`/`-CascadingMenu` set the style) |
 | `Invoke-MarkstrataRefresh` | Indexes, then a page per document, then the menu (not the renderer) |
 | `New-MarkstrataPage` | Create one page for one document |
 | `Update-MarkstrataPageSetting` | Push web part settings to existing pages |
@@ -254,6 +254,15 @@ Every command has full help: `Get-Help Publish-MarkstrataLibrary -Full`.
 - **A document must not share its category folder's name** - it would collide with the generated
   index for that category.
 - **Group headings are not clickable** and have no page of their own.
+- **A navigation rebuild never changes the menu style.** Mega menu versus cascading is a deliberate
+  choice made in the SharePoint UI, and `Update-MarkstrataNavigation` rebuilds the menu's CONTENTS
+  only. Change the style on purpose with `-MegaMenu` or `-CascadingMenu`; the summary's `MenuStyle`
+  says what the run did (`Unchanged`, `MegaMenu`, `CascadingMenu` or `Failed`).
+
+  This is a **behaviour change**: until 1.3.0 the command forced the style to mega menu on every
+  run, because `navigation.megaMenu` defaulted to true and there was no way to opt out. A rebuild
+  run to update links would silently revert a site an administrator had switched to cascading. The
+  setting has been removed; a leftover `megaMenu` key in your own config is ignored, with a warning.
 - **Nothing is ever written to the module folder.** Your configuration, the category list and the
   menu groups all live in `%LOCALAPPDATA%\MarkstrataSiteBuilder`; the `config/` folder inside the
   module holds the shipped defaults and the templates those files are seeded from, and is only

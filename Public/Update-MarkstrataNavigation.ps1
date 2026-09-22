@@ -27,23 +27,44 @@ function Update-MarkstrataNavigation {
         (navigation.location); TopNavigationBar is only right for a classic team site whose top
         bar is shown.
 
+        This rebuilds the menu's CONTENTS and never its STYLE. Mega menu versus cascading is a
+        deliberate choice made in the SharePoint UI, and a routine rebuild run to update LINKS has
+        no business reimposing it - which is what this command used to do on every run, silently.
+        -MegaMenu and -CascadingMenu are how you change it, on purpose.
+
     .PARAMETER SetHomePage
         Also point the site's welcome page at the generated Markdown home index.
 
     .PARAMETER SkipPages
         Leave the per-document child nodes out even if navigation.includePages is on.
 
+    .PARAMETER MegaMenu
+        Switch the site to a mega menu, which renders the category -> documents hierarchy as columns
+        and is what makes a 200-node menu usable. Mutually exclusive with -CascadingMenu. Without
+        either switch the current style is left exactly as it is.
+
+    .PARAMETER CascadingMenu
+        Switch the site to a cascading menu. Mutually exclusive with -MegaMenu.
+
     .PARAMETER PassThru
         Emit the per-category detail instead of only the summary.
 
     .OUTPUTS
-        PSCustomObject summary (Location, Categories, PageNodes, Skipped, HomePage, Elapsed).
+        PSCustomObject summary (Location, Categories, PageNodes, Skipped, MenuStyle, HomePage,
+        Elapsed). MenuStyle reports what this run did to the style: Unchanged, MegaMenu,
+        CascadingMenu or Failed.
 
     .EXAMPLE
         Connect-MarkstrataSite
         Update-MarkstrataNavigation -SetHomePage
 
-        Rebuild the whole menu and make the Markdown home index the site's landing page.
+        Rebuild the whole menu and make the Markdown home index the site's landing page. The menu
+        style is left as the site has it.
+
+    .EXAMPLE
+        Update-MarkstrataNavigation -MegaMenu
+
+        Rebuild the menu AND switch the site to a mega menu, deliberately.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([pscustomobject])]
@@ -52,8 +73,16 @@ function Update-MarkstrataNavigation {
 
         [switch]$SkipPages,
 
-        [switch]$PassThru
+        [switch]$PassThru,
+
+        [switch]$MegaMenu,
+
+        [switch]$CascadingMenu
     )
+
+    if ($MegaMenu -and $CascadingMenu) {
+        throw "Pass either -MegaMenu or -CascadingMenu, not both."
+    }
 
     if (-not $script:SharePointReady) {
         throw "Not connected. Run Connect-MarkstrataSite first."
@@ -66,8 +95,14 @@ function Update-MarkstrataNavigation {
     } else { "QuickLaunch" }
     $includeHome  = [bool](Get-OptionalProperty $navigationConfig "includeHome" $true)
     $includePages = (-not $SkipPages) -and [bool](Get-OptionalProperty $navigationConfig "includePages" $true)
-    $megaMenu     = [bool](Get-OptionalProperty $navigationConfig "megaMenu" $true)
     $useGroups    = [bool](Get-OptionalProperty $navigationConfig "useGroups" $true)
+
+    # navigation.megaMenu used to force the site's menu style on every run. It is no longer read as
+    # a setting - only detected, so that anyone still carrying it is told it does nothing rather
+    # than quietly wondering why their menu stopped changing.
+    if ($null -ne (Get-OptionalProperty $navigationConfig "megaMenu" $null)) {
+        Write-MarkstrataLog -Message "navigation.megaMenu is no longer used: a rebuild never changes the menu style. Pass -MegaMenu or -CascadingMenu to change it on purpose." -Level Warning -Component "Navigation"
+    }
 
     $homeLeaf  = [System.IO.Path]::GetFileNameWithoutExtension([string]$config.MarkdownIndex.homeFileName)
 
@@ -174,15 +209,40 @@ function Update-MarkstrataNavigation {
         return [pscustomobject]@{
             Location = $navigationLocation; Categories = $orderedFolders.Count
             PageNodes = $(if ($includePages) { $documentPages.Count } else { 0 })
-            Skipped = 0; HomePage = $null; Elapsed = [TimeSpan]::Zero
+            Skipped = 0; MenuStyle = "WhatIf"; HomePage = $null; Elapsed = [TimeSpan]::Zero
         }
     }
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-    # Mega menu renders the category -> documents hierarchy as columns, which is what makes a
-    # 200-node menu usable. It is a SWITCH parameter - "-MegaMenuEnabled $true" silently binds wrong.
-    if ($megaMenu) { Set-PnPWeb -MegaMenuEnabled:$true -ErrorAction SilentlyContinue }
+    # The menu STYLE is only ever touched when asked for. Mega menu renders the category ->
+    # documents hierarchy as columns, which is what makes a 200-node menu usable - but an
+    # administrator who chose cascading in the SharePoint UI chose it, and a rebuild run to update
+    # LINKS reverting that is a bug, not a feature.
+    #
+    # NOTE: -MegaMenuEnabled is a SWITCH parameter - "-MegaMenuEnabled $true" silently binds wrong
+    # and does nothing. It has to be "-MegaMenuEnabled:$value".
+    #
+    # NOTE: do not reintroduce a $megaMenu variable here. PowerShell names are case-insensitive, so
+    # $megaMenu IS the -MegaMenu parameter, and assigning to it overwrites what the caller passed.
+    $menuStyle = "Unchanged"
+    if ($MegaMenu -or $CascadingMenu) {
+        $wantMega = [bool]$MegaMenu
+        try {
+            Set-PnPWeb -MegaMenuEnabled:$wantMega -ErrorAction Stop
+            $menuStyle = if ($wantMega) { "MegaMenu" } else { "CascadingMenu" }
+            Write-MarkstrataLog -Message "Menu style set explicitly: MegaMenuEnabled=$wantMega." -Component "Navigation"
+        }
+        catch {
+            # Worth reporting, not worth failing a whole navigation rebuild over.
+            $menuStyle = "Failed"
+            Write-MarkstrataLog -Message "Could not change the menu style: $($_.Exception.Message)" -Level Warning -Component "Navigation"
+        }
+    }
+    else {
+        $currentMega = (Get-PnPWeb -Includes MegaMenuEnabled -ErrorAction SilentlyContinue).MegaMenuEnabled
+        Write-MarkstrataLog -Message "Menu style left as found (MegaMenuEnabled=$currentMega). Pass -MegaMenu or -CascadingMenu to change it." -Component "Navigation" -NoConsole
+    }
 
     # Clear BOTH collections. Remove-PnPNavigationNode has no -Location parameter, and a single
     # sweep can leave stragglers behind (a silent partial clear is what piles up duplicates), so
@@ -346,6 +406,7 @@ function Update-MarkstrataNavigation {
         Categories   = $orderedFolders.Count
         PageNodes    = ($details | Measure-Object Pages -Sum).Sum
         Skipped      = $skipped
+        MenuStyle    = $menuStyle
         FooterPruned = $footerPruned
         HomePage     = $homePageSet
         Elapsed      = $stopwatch.Elapsed

@@ -122,7 +122,7 @@
     "listFile": "categories.json"
   },
 
-  "_navigation": "The site menu. On a communication site the horizontal bar under the header is sourced from QuickLaunch, NOT TopNavigationBar - TopNavigationBar is only right for a classic team site.",
+  "_navigation": "The site menu. On a communication site the horizontal bar under the header is sourced from QuickLaunch, NOT TopNavigationBar - TopNavigationBar is only right for a classic team site. Note that nothing here sets the menu STYLE: rebuilding a menu's contents never changes whether the site uses a mega or a cascading menu, which is a deliberate choice made in the SharePoint UI. The old 'megaMenu' setting forced it on every run and has been removed; Update-MarkstrataNavigation -MegaMenu or -CascadingMenu changes it on purpose, and a leftover megaMenu key in your own config is ignored with a warning.",
   "navigation": {
     "location": "QuickLaunch",
     "includeHome": true,
@@ -133,8 +133,6 @@
 
     "_includePages": "Add every document as a child node under its category. With useGroups that makes documents a THIRD level, which is slow to build (one REST call per node) and produces very long menu panels - and it is redundant, because a category node already opens its index screen listing exactly those documents.",
     "includePages": false,
-
-    "megaMenu": true,
 
     "_pruneFooter": "Remove footer links that point at pages outside the page root. A new communication site ships with footer links to its sample pages; once those are deleted the footer is left carrying dead links. External links and anything already under the page root are kept.",
     "pruneFooter": true,
