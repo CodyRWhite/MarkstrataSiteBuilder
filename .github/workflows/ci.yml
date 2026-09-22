@@ -30,11 +30,11 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Cache PowerShell modules
         # PnP.PowerShell is a large install and the slowest step in the job by far.
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~\Documents\PowerShell\Modules
           key: psmodules-${{ runner.os }}-${{ hashFiles('MarkstrataSiteBuilder.psd1', '.github/workflows/ci.yml') }}
@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pester-results
           path: testResults.xml
@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
