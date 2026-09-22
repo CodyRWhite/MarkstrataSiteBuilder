@@ -309,6 +309,17 @@ Every command has full help: `Get-Help Publish-MarkstrataLibrary -Full`.
 
 ---
 
+## Releases
+
+Bump `ModuleVersion` in the manifest, add the matching `## [x.y.z]` section to `CHANGELOG.md`, and
+merge. Once CI passes on `main`, the release workflow tags `vx.y.z` and drafts a GitHub release
+whose body is that changelog section, for you to read and publish.
+
+It only ever tags a commit whose CI passed, and does nothing when the manifest's version is already
+tagged - so an ordinary commit that changes no version is a no-op. The test suite checks that the
+manifest version has a changelog section, so a bump without one fails before it is merged rather
+than in the release.
+
 ## Development
 
 ```powershell
