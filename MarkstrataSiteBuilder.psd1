@@ -8,7 +8,7 @@
     RootModule        = 'MarkstrataSiteBuilder.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.2.0'
+    ModuleVersion     = '1.3.0'
 
     # ID used to uniquely identify this module
     GUID              = 'c7f0a9b4-3d21-4a6e-9f18-2b5c6d8e4a10'
@@ -69,6 +69,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+1.3.0
+- A navigation rebuild no longer forces the site's menu style to mega menu.
+  Style changes only on -MegaMenu or -CascadingMenu; navigation.megaMenu is
+  removed. Behaviour change for anyone running Update-MarkstrataNavigation.
+
 1.2.0
 - Pages no longer publish blank: the web part is resolved by componentId to a
   component object and every page is verified to carry it. The package now
