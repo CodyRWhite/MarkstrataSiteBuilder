@@ -1081,6 +1081,93 @@ Describe 'The manifest version is releasable' {
     }
 }
 
+Describe 'Invoke-MarkstrataRefresh rebuilds for the renderer model' {
+    # It used to run Publish-MarkstrataLibrary -RemoveOrphan: a page per document, plus a sweep.
+    # On a site using the single renderer that rebuilt the very tree the renderer replaces, while
+    # the README described it as building the renderer, indexes and menu.
+    BeforeAll {
+        $script:RefreshState = & $script:Module {
+            [pscustomobject]@{ Ready = $script:SharePointReady; Site = $script:SharePointSite }
+        }
+        & $script:Module {
+            $script:SharePointReady = $true
+            $script:SharePointSite = [pscustomobject]@{
+                Url = 'https://contoso.sharepoint.com/sites/docs'
+                ServerRelativeUrl = '/sites/docs'
+                Title = 'Docs'
+            }
+        }
+        $script:RefreshRoot = Join-Path $TestDrive 'refresh'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:RefreshRoot 'Alpha') | Out-Null
+        Set-Content -Encoding utf8NoBOM -LiteralPath (Join-Path $script:RefreshRoot 'Alpha/Page One.md') -Value '# Page One'
+    }
+
+    AfterAll {
+        & $script:Module {
+            param($State)
+            $script:SharePointReady = $State.Ready
+            $script:SharePointSite = $State.Site
+        } $script:RefreshState
+    }
+
+    BeforeEach {
+        Mock -CommandName New-MarkstrataIndex -ModuleName MarkstrataSiteBuilder -MockWith { [pscustomobject]@{ Written = 1 } }
+        Mock -CommandName New-MarkstrataRenderer -ModuleName MarkstrataSiteBuilder -MockWith { [pscustomobject]@{ Status = 'Skipped' } }
+        Mock -CommandName Update-MarkstrataNavigation -ModuleName MarkstrataSiteBuilder -MockWith { [pscustomobject]@{ Categories = 1 } }
+        Mock -CommandName Publish-MarkstrataLibrary -ModuleName MarkstrataSiteBuilder -MockWith { [pscustomobject]@{ Documents = 0 } }
+        # The library agrees with the local folder, so the sync wait passes on its first look.
+        Mock -CommandName Get-PnPListItem -ModuleName MarkstrataSiteBuilder -MockWith {
+            @([pscustomobject]@{
+                    FieldValues = @{
+                        FileLeafRef = 'Page One.md'
+                        FileRef     = '/sites/docs/Shared Documents/Alpha/Page One.md'
+                    }
+                })
+        }
+    }
+
+    It 'builds the renderer instead of a page per document' {
+        $result = Invoke-MarkstrataRefresh -LibraryRoot $script:RefreshRoot -Confirm:$false
+
+        Should -Invoke New-MarkstrataRenderer -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly
+        Should -Invoke Publish-MarkstrataLibrary -ModuleName MarkstrataSiteBuilder -Times 0 -Exactly
+        $result.Renderer | Should -Not -BeNullOrEmpty
+        $result.PSObject.Properties.Name | Should -Not -Contain 'Publish'
+    }
+
+    It 'does not touch the site welcome page by default' {
+        # The same principle as the menu style: which page a site lands on is a deliberate choice,
+        # and a routine refresh reimposing it is the bug, not the feature.
+        Invoke-MarkstrataRefresh -LibraryRoot $script:RefreshRoot -Confirm:$false | Out-Null
+
+        Should -Invoke New-MarkstrataRenderer -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly `
+            -ParameterFilter { -not $SetHomePage }
+        Should -Invoke Update-MarkstrataNavigation -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly `
+            -ParameterFilter { -not $SetHomePage }
+    }
+
+    It 'sets the welcome page only when asked, and on the renderer' {
+        Invoke-MarkstrataRefresh -LibraryRoot $script:RefreshRoot -SetHomePage -Confirm:$false | Out-Null
+
+        Should -Invoke New-MarkstrataRenderer -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly `
+            -ParameterFilter { $SetHomePage }
+    }
+
+    It 'leaves the renderer alone with -SkipRenderer' {
+        $result = Invoke-MarkstrataRefresh -LibraryRoot $script:RefreshRoot -SkipRenderer -Confirm:$false
+
+        Should -Invoke New-MarkstrataRenderer -ModuleName MarkstrataSiteBuilder -Times 0 -Exactly
+        $result.Renderer | Should -BeNullOrEmpty
+        Should -Invoke Update-MarkstrataNavigation -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly
+    }
+
+    It 'still regenerates the indexes and the menu' {
+        Invoke-MarkstrataRefresh -LibraryRoot $script:RefreshRoot -Confirm:$false | Out-Null
+        Should -Invoke New-MarkstrataIndex -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly
+        Should -Invoke Update-MarkstrataNavigation -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }

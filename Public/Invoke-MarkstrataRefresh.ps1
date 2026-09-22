@@ -2,22 +2,27 @@ function Invoke-MarkstrataRefresh {
     <#
     .SYNOPSIS
         One-call refresh after documents have been added, edited, retired, moved or renamed:
-        indexes, waits for sync, publishes, sweeps orphans, rebuilds the menu.
+        indexes, waits for sync, the renderer page, the menu.
 
     .DESCRIPTION
         The steps have to run in this order, and each depends on the one before:
 
-          1. New-MarkstrataIndex    - regenerate the home index and every category index from
-                                        what is actually in the local library folder.
-          2. Wait for OneDrive        - the library, not the local folder, is what pages render
-                                        from, so nothing can be published until the sync lands.
-          3. Publish-MarkstrataLibrary  - a page per document, plus -RemoveOrphan to recycle pages
-                                        whose document has been deleted.
-          4. Update-MarkstrataNavigation - rebuild the menu from the pages that now exist.
+          1. New-MarkstrataIndex         - regenerate the home index and every category index from
+                                           what is actually in the local library folder.
+          2. Wait for OneDrive           - the renderer serves documents out of the LIBRARY, not the
+                                           local folder, so nothing is worth rebuilding until the
+                                           sync lands.
+          3. New-MarkstrataRenderer      - the single page that serves every document.
+          4. Update-MarkstrataNavigation - rebuild the menu from the documents that now exist.
 
-        Step 2 is the one that is easy to get wrong by hand. Publishing straight after writing
-        files creates pages pointing at documents SharePoint does not have yet, and deleting
-        documents leaves pages behind until step 3 sweeps them.
+        Step 2 is the one that is easy to get wrong by hand: a menu rebuilt before the sync lands
+        points at documents SharePoint does not have yet.
+
+        This used to run Publish-MarkstrataLibrary -RemoveOrphan instead of step 3 - a page per
+        document, plus a sweep of the pages whose document had gone. On a site using the single
+        renderer that rebuilt the very tree the renderer exists to replace, which is not what a
+        command called "refresh" should do to a site. Publish-MarkstrataLibrary is still there for
+        anyone who wants those pages, and Publish-MarkstrataLibrary -OrphanOnly still sweeps them.
 
     .PARAMETER LibraryRoot
         Local root of the synced document library. Defaults to markdown.libraryRoot.
@@ -31,22 +36,29 @@ function Invoke-MarkstrataRefresh {
         Do not regenerate the index screens (use the ones already in the library).
 
     .PARAMETER SkipNavigation
-        Publish pages but leave the menu alone.
+        Rebuild everything else but leave the menu alone.
 
-    .PARAMETER KeepOrphan
-        Do not recycle pages whose Markdown document has been deleted.
+    .PARAMETER SkipRenderer
+        Leave the renderer page alone. It serves whatever documents exist, so a library that has
+        only gained or lost documents does not need it rebuilt at all.
+
+    .PARAMETER SetHomePage
+        Also point the site's welcome page at the renderer. NOT done by default: which page a site
+        lands on is a deliberate choice, and a routine refresh has no business changing it. Pass
+        this the first time, or after moving the renderer.
 
     .PARAMETER Force
-        Recreate pages that already exist rather than leaving them alone.
+        Recreate the renderer page even if it already exists.
 
     .OUTPUTS
-        PSCustomObject with Index, Publish and Navigation results, plus Elapsed.
+        PSCustomObject with Index, Renderer and Navigation results, plus Elapsed.
 
     .EXAMPLE
         Connect-MarkstrataSite
         Invoke-MarkstrataRefresh
 
-        The whole refresh after a round of editing and retiring documents.
+        The whole refresh after a round of editing and retiring documents: indexes, the renderer,
+        the menu. Nothing about the site's style or landing page is touched.
 
     .EXAMPLE
         Invoke-MarkstrataRefresh -WhatIf
@@ -64,7 +76,9 @@ function Invoke-MarkstrataRefresh {
 
         [switch]$SkipNavigation,
 
-        [switch]$KeepOrphan,
+        [switch]$SkipRenderer,
+
+        [switch]$SetHomePage,
 
         [switch]$Force
     )
@@ -81,7 +95,7 @@ function Invoke-MarkstrataRefresh {
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $indexResult = $null
-    $publishResult = $null
+    $rendererResult = $null
     $navigationResult = $null
 
     # --- 1. Index screens ---------------------------------------------------------------------
@@ -151,17 +165,24 @@ function Invoke-MarkstrataRefresh {
         Write-MarkstrataLog -Message "Sync complete: local folder and library agree." -Component "Refresh"
     }
 
-    # --- 3. Pages ------------------------------------------------------------------------------
-    Write-MarkstrataLog -Message "Refresh 3/4: publishing pages." -Component "Refresh"
-    $publishArguments = @{}
-    if ($Force) { $publishArguments["Force"] = $true }
-    if (-not $KeepOrphan) { $publishArguments["RemoveOrphan"] = $true }
-    $publishResult = Publish-MarkstrataLibrary @publishArguments
+    # --- 3. The renderer -----------------------------------------------------------------------
+    # One page serves every document, so this is a no-op on a site that already has it - which is
+    # why -SkipRenderer exists for the common case of documents having only come and gone.
+    if (-not $SkipRenderer) {
+        Write-MarkstrataLog -Message "Refresh 3/4: checking the renderer page." -Component "Refresh"
+        $rendererArguments = @{}
+        if ($Force)       { $rendererArguments["Force"] = $true }
+        if ($SetHomePage) { $rendererArguments["SetHomePage"] = $true }
+        $rendererResult = New-MarkstrataRenderer @rendererArguments
+    }
 
     # --- 4. Menu -------------------------------------------------------------------------------
+    # Not -SetHomePage: that pointed the welcome page at the generated home INDEX page, which on
+    # this model may not exist, and changing which page a site lands on is not a refresh's business.
+    # Step 3 sets it when asked, to the renderer.
     if (-not $SkipNavigation) {
         Write-MarkstrataLog -Message "Refresh 4/4: rebuilding the menu." -Component "Refresh"
-        $navigationResult = Update-MarkstrataNavigation -SetHomePage
+        $navigationResult = Update-MarkstrataNavigation
     }
 
     $stopwatch.Stop()
@@ -169,7 +190,7 @@ function Invoke-MarkstrataRefresh {
 
     return [pscustomobject]@{
         Index      = $indexResult
-        Publish    = $publishResult
+        Renderer   = $rendererResult
         Navigation = $navigationResult
         Elapsed    = $stopwatch.Elapsed
     }
