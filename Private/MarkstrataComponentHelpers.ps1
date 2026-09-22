@@ -46,23 +46,44 @@ function Resolve-MarkstrataComponent {
         available to a specific page, so it needs one that is already there - normally the page just
         created by the caller.
 
+    .PARAMETER ComponentId
+        Build with THIS component instead of the configured one, for a single run. A site that keeps
+        some documents on one component and some on the other would otherwise need a config edit
+        between runs. An explicit id never falls back to componentName: naming a component
+        deliberately and silently getting a different one is worse than failing.
+
     .OUTPUTS
         The component object, ready to pass to Add-PnPPageWebPart -Component.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Page
+        [string]$Page,
+
+        [string]$ComponentId = ""
     )
 
-    if ($script:ResolvedComponent) { return $script:ResolvedComponent }
-
     $config = Get-MarkstrataConfig
-    $wantedId = (([string](Get-OptionalProperty $config.MarkdownPage "componentId" "")).Trim()).Trim("{}").ToLowerInvariant()
-    $wantedName = ([string](Get-OptionalProperty $config.MarkdownPage "componentName" "")).Trim()
+    $explicit = [bool]$ComponentId
+    if ($explicit) {
+        $wantedId = $ComponentId.Trim().Trim("{}").ToLowerInvariant()
+        $wantedName = ""
+    }
+    else {
+        $wantedId = (([string](Get-OptionalProperty $config.MarkdownPage "componentId" "")).Trim()).Trim("{}").ToLowerInvariant()
+        $wantedName = ([string](Get-OptionalProperty $config.MarkdownPage "componentName" "")).Trim()
+    }
 
     if (-not $wantedId -and -not $wantedName) {
         throw "Neither markdownPage.componentId nor markdownPage.componentName is set, so there is no web part to build with."
+    }
+
+    # The cache is keyed on what was asked for, not just "something was resolved once". Two runs in
+    # one session can now ask for different components, and returning the first would build the
+    # second run's pages with the wrong web part - silently, since both attach perfectly well.
+    $cacheKey = if ($wantedId) { "id:$wantedId" } else { "name:$wantedName" }
+    if ($script:ResolvedComponent -and $script:ResolvedComponentKey -eq $cacheKey) {
+        return $script:ResolvedComponent
     }
 
     $available = @(Get-PnPAvailablePageComponents -Page $Page -ErrorAction Stop)
@@ -74,7 +95,7 @@ function Resolve-MarkstrataComponent {
             Select-Object -First 1
     }
 
-    if (-not $match -and $wantedName) {
+    if (-not $match -and $wantedName -and -not $explicit) {
         $byName = @($available | Where-Object { [string](Get-OptionalProperty $_ "Name" "") -eq $wantedName })
         if ($byName.Count -gt 1) {
             throw "componentName '$wantedName' matches $($byName.Count) components on this site. Set markdownPage.componentId to the GUID of the one you want."
@@ -92,11 +113,13 @@ function Resolve-MarkstrataComponent {
             Where-Object { [string](Get-OptionalProperty $_ "Name" "") -like "*Markstrata*" } |
             ForEach-Object { "{0} ({1})" -f (Get-OptionalProperty $_ "Name" ""), (Get-OptionalProperty $_ "Id" "") })
         $detail = if ($installed.Count -gt 0) { $installed -join "; " } else { "none - the package is not added to this site" }
-        throw "No web part matches componentId '$wantedId' or componentName '$wantedName'. Markstrata components on this site: $detail"
+        $asked = if ($explicit) { "-ComponentId '$wantedId'" } else { "componentId '$wantedId' or componentName '$wantedName'" }
+        throw "No web part matches $asked. Markstrata components on this site: $detail"
     }
 
     Write-MarkstrataLog -Message "Resolved web part: $(Get-OptionalProperty $match 'Name' '') ($(Get-OptionalProperty $match 'Id' ''))" -Component "Page" -NoConsole
     $script:ResolvedComponent = $match
+    $script:ResolvedComponentKey = $cacheKey
     return $match
 }
 

@@ -65,6 +65,7 @@ $script:CategoryData      = $null   # cached { Map = @{folder->display name}; Li
 $script:CategoryGroupData = $null   # cached themed groups (category-groups.json, in the data folder)
 $script:CategoryGroupFile = $null   # path the cached groups were read from, for messages
 $script:ResolvedComponent = $null   # cached web part object (markdownPage.componentId) for this site
+$script:ResolvedComponentKey = $null # what that cache entry was resolved FOR, so an override re-resolves
 $script:linkTally         = 0       # per-document link conversion counter (Convert-MarkstrataLink)
 
 # The URL SharePoint itself stores for a navigation "Label" - a node that renders as plain text

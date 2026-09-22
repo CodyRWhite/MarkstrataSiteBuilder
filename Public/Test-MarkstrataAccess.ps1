@@ -23,6 +23,11 @@ function Test-MarkstrataAccess {
         Each check is reported separately and a failure in one does not stop the others, so a
         single run tells you everything that is wrong rather than the first thing.
 
+    .PARAMETER ComponentId
+        Check THIS component instead of the configured one. The package installs more than one, so
+        this is how you confirm the other is available on a site before building with it -
+        Test-MarkstrataAccess -ComponentId <guid>, then the same id on the build command.
+
     .OUTPUTS
         PSCustomObject with Ok, Site, Mode, DocumentCount, and Checks (one entry per check with
         Name, Status and Detail).
@@ -37,7 +42,9 @@ function Test-MarkstrataAccess {
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject])]
-    param()
+    param(
+        [string]$ComponentId = ""
+    )
 
     if (-not $script:SharePointReady) {
         throw "Not connected. Run Connect-MarkstrataSite first."
@@ -142,8 +149,16 @@ function Test-MarkstrataAccess {
     #
     # Get-PnPAvailablePageComponents replaced Get-PnPAvailableClientSideComponent and lists what is
     # available TO A PAGE, so it needs an existing one to ask against.
-    $componentId = ([string](Get-OptionalProperty $config.MarkdownPage "componentId" "")).Trim().Trim("{}").ToLowerInvariant()
-    $componentName = ([string](Get-OptionalProperty $config.MarkdownPage "componentName" "")).Trim()
+    # -ComponentId checks a component the config does not name, which is how you confirm the OTHER
+    # web part is usable on this site BEFORE building anything with it.
+    $checkingOverride = [bool]$ComponentId
+    $componentId = if ($checkingOverride) {
+        $ComponentId.Trim().Trim("{}").ToLowerInvariant()
+    }
+    else {
+        ([string](Get-OptionalProperty $config.MarkdownPage "componentId" "")).Trim().Trim("{}").ToLowerInvariant()
+    }
+    $componentName = if ($checkingOverride) { "" } else { ([string](Get-OptionalProperty $config.MarkdownPage "componentName" "")).Trim() }
     $probePage = Get-MarkstrataComponentProbePage
 
     if (-not $probePage) {

@@ -35,4 +35,5 @@ function Disconnect-MarkstrataSite {
     # The resolved web part belongs to the site it was resolved on; the next site may have a
     # different set of components installed, or none.
     $script:ResolvedComponent = $null
+    $script:ResolvedComponentKey = $null
 }

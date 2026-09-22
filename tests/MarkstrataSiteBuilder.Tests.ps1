@@ -995,6 +995,64 @@ Describe 'Navigation rebuild and the menu style' {
     }
 }
 
+Describe 'Per-run component override' {
+    # A library split across the two components would otherwise need a config edit between runs.
+    BeforeAll {
+        $script:TwoComponents = @(
+            [pscustomobject]@{ Name = 'Markstrata - Markdown'; Id = '{74AECD51-7619-4CA6-B81A-6C670D6098B3}' }
+            [pscustomobject]@{ Name = 'Markstrata - HTML';     Id = '{11111111-2222-3333-4444-555555555555}' }
+        )
+    }
+
+    BeforeEach {
+        $components = $script:TwoComponents
+        Mock -CommandName Get-PnPAvailablePageComponents -ModuleName MarkstrataSiteBuilder -MockWith { $components }.GetNewClosure()
+        & $script:Module { $script:ResolvedComponent = $null; $script:ResolvedComponentKey = $null }
+    }
+
+    It 'builds with the id passed in, not the configured one' {
+        $resolved = & $script:Module {
+            Resolve-MarkstrataComponent -Page 'Wiki.aspx' -ComponentId '11111111-2222-3333-4444-555555555555'
+        }
+        $resolved.Name | Should -Be 'Markstrata - HTML'
+    }
+
+    It 'still uses the configured component when no id is passed' {
+        $resolved = & $script:Module { Resolve-MarkstrataComponent -Page 'Wiki.aspx' }
+        $resolved.Name | Should -Be 'Markstrata - Markdown'
+    }
+
+    It 're-resolves when a second run asks for a different component' {
+        # The session cache used to answer "something was resolved once". Handing the second run the
+        # first run's component would build its pages with the wrong web part, and both attach
+        # perfectly well - so nothing would look wrong until someone opened a page.
+        $first = & $script:Module { Resolve-MarkstrataComponent -Page 'Wiki.aspx' }
+        $second = & $script:Module {
+            Resolve-MarkstrataComponent -Page 'Wiki.aspx' -ComponentId '11111111-2222-3333-4444-555555555555'
+        }
+        $first.Name  | Should -Be 'Markstrata - Markdown'
+        $second.Name | Should -Be 'Markstrata - HTML'
+    }
+
+    It 'serves a repeat of the same request from cache' {
+        & $script:Module { Resolve-MarkstrataComponent -Page 'Wiki.aspx' } | Out-Null
+        & $script:Module { Resolve-MarkstrataComponent -Page 'Wiki.aspx' } | Out-Null
+        Should -Invoke Get-PnPAvailablePageComponents -ModuleName MarkstrataSiteBuilder -Times 1 -Exactly
+    }
+
+    It 'never falls back to a display name when an id was named explicitly' {
+        # Asking for one component and silently getting another is worse than failing: the pages
+        # would build, and look fine, rendering with the wrong web part.
+        { & $script:Module {
+                Resolve-MarkstrataComponent -Page 'Wiki.aspx' -ComponentId 'no-such-component'
+            } } | Should -Throw -ExpectedMessage "*-ComponentId 'no-such-component'*"
+    }
+
+    AfterAll {
+        & $script:Module { $script:ResolvedComponent = $null; $script:ResolvedComponentKey = $null }
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }

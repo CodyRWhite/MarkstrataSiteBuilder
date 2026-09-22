@@ -23,6 +23,11 @@ function Publish-MarkstrataLibrary {
     .PARAMETER Limit
         Stop after this many documents. Useful for a first run against a handful of pages.
 
+    .PARAMETER ComponentId
+        Build this run's pages with a specific web part instead of the configured one, so a library
+        can be split across the two components without a config edit between runs. Checked in the
+        pre-flight, before any page is touched.
+
     .PARAMETER Force
         Recreate pages that already exist, instead of leaving them alone.
 
@@ -73,6 +78,8 @@ function Publish-MarkstrataLibrary {
 
         [int]$Limit = 0,
 
+        [string]$ComponentId = "",
+
         [switch]$Force,
 
         [switch]$RemoveOrphan,
@@ -110,7 +117,7 @@ function Publish-MarkstrataLibrary {
     if (-not $OrphanOnly) {
         $probePage = Get-MarkstrataComponentProbePage
         if ($probePage) {
-            $component = Resolve-MarkstrataComponent -Page $probePage
+            $component = Resolve-MarkstrataComponent -Page $probePage -ComponentId $ComponentId
             $componentLabel = [string](Get-OptionalProperty $component "Name" "")
             Write-MarkstrataLog -Message "Building with web part '$componentLabel'." -Component "MarkdownPage"
         }
@@ -200,6 +207,7 @@ function Publish-MarkstrataLibrary {
             Length   = $document.Length
         }
         if ($Force) { $pageArguments["Force"] = $true }
+        if ($ComponentId) { $pageArguments["ComponentId"] = $ComponentId }
         # Category is the TOP-LEVEL folder - the library's structure IS the taxonomy now. A nested
         # folder (Alpha/Section/Subsection) is a section inside Alpha, not a category of its own,
         # so the last segment would file those documents under "Subsection".

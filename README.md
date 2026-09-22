@@ -133,6 +133,19 @@ Get-PnPAvailablePageComponents -Page Wiki.aspx |
 `componentName` is a fallback used only when the id matches nothing, and a build that falls back
 says so. A name matching two components is an error rather than a guess.
 
+To confirm a component is usable on a site before building with it, and then build one run with it
+without touching config:
+
+```powershell
+Test-MarkstrataAccess -ComponentId <guid>          # is it there?
+Publish-MarkstrataLibrary -ComponentId <guid>      # build this run with it
+```
+
+`-ComponentId` is on `New-MarkstrataRenderer`, `New-MarkstrataPage` and `Publish-MarkstrataLibrary`
+too, which is what lets one library keep some documents on each component. An id passed explicitly
+never falls back to a name: asking for one component and silently getting another would build pages
+that look fine and render with the wrong web part.
+
 ### 4. Build
 
 ```powershell

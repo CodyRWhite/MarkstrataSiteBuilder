@@ -67,5 +67,6 @@ function Set-MarkstrataUserConfig {
     $script:Config = $null
     # markdownPage.componentId may have just changed, and the resolved web part was chosen by it.
     $script:ResolvedComponent = $null
+    $script:ResolvedComponentKey = $null
     return $script:UserOverride
 }

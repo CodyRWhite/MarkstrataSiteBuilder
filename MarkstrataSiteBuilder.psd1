@@ -73,6 +73,9 @@
 - A navigation rebuild no longer forces the site's menu style to mega menu.
   Style changes only on -MegaMenu or -CascadingMenu; navigation.megaMenu is
   removed. Behaviour change for anyone running Update-MarkstrataNavigation.
+- -ComponentId on the build commands and Test-MarkstrataAccess, so a run can
+  target either installed web part without a config edit.
+- The resolved-component cache is keyed on what was asked for.
 
 1.2.0
 - Pages no longer publish blank: the web part is resolved by componentId to a
