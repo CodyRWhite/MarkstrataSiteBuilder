@@ -52,12 +52,14 @@ which address the *document* rather than a page URL, so they keep working when p
 | --- | --- |
 | PowerShell | 7.2 or later |
 | [PnP.PowerShell](https://pnp.github.io/powershell/) | 3.0 or later |
-| Markstrata web part | installed in your tenant app catalogue and available on the target site |
+| [Markstrata web part](https://github.com/CodyRWhite/Markstrata) | installed in your tenant app catalogue and available on the target site |
 | SharePoint | an existing site, and a document library holding the `.md` files |
 | Entra ID | an account that may create app registrations, for the one-time setup |
 
-The **Markstrata** SharePoint Framework web part does the actual Markdown rendering. This module
-builds and maintains the site around it.
+The **[Markstrata](https://github.com/CodyRWhite/Markstrata)** SharePoint Framework web part does
+the actual rendering. It is the companion project to this one - same author, released separately
+because a web part is deployed to a tenant app catalogue and a PowerShell module is not. This
+module builds and maintains the site around it.
 
 ---
 
@@ -121,9 +123,25 @@ The Markstrata package installs more than one component - `Markstrata - Markdown
 `Markstrata - HTML`. `markdownPage.componentId` picks the one every page is built with, by GUID,
 because display names have already changed once and a bare `Markstrata` now matches neither.
 
-Building with the other component is the same operation: put its id in `componentId` and set
-`webPartProperties` to the keys that component accepts. Nothing else differs. To list what a site
-has:
+The two components and their ids, as the package ships them:
+
+| Component | `componentId` |
+| --- | --- |
+| Markstrata - Markdown | `74aecd51-7619-4ca6-b81a-6c670d6098b3` |
+| Markstrata - HTML | `36ac307a-2d6b-439b-8ce0-82640db75ecb` |
+
+Both are recorded in the shipped config: the HTML component's id and its property defaults sit
+under the documentation keys `_htmlComponentId` and `_htmlWebPartProperties`, which the loader
+ignores, so switching is a copy rather than a lookup.
+
+**What "supported the same way" does and does not cover.** Attaching either component to a page
+works identically - the resolve, the assert, `-ComponentId`, the readiness check. But the HTML
+component loads `.html` and `.htm` documents, and this module's library walk finds only `.md`, so
+pointing it at a Markdown library gives you pages whose web part has nothing it can render. Until
+the walk is extension-aware, the HTML component is usable here for individual pages you point at
+`.html` documents yourself, not for publishing a whole library.
+
+To list what a site has:
 
 ```powershell
 Get-PnPAvailablePageComponents -Page Wiki.aspx |

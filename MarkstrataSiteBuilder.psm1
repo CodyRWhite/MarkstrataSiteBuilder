@@ -20,8 +20,9 @@
       * Media relocation, orphan sweeps and link conversion between page links and wiki links.
 
     Rendering is done by the Markstrata SharePoint Framework web part, which must be installed
-    in the tenant app catalogue. This module is an independent companion to it and is not
-    affiliated with its publisher.
+    in the tenant app catalogue. That web part is this project's companion - same author, released
+    separately because a web part deploys to a tenant app catalogue and a PowerShell module does
+    not: https://github.com/CodyRWhite/Markstrata
 
     No secrets are stored on disk. Authentication is either interactive (delegated) or app-only
     with a certificate supplied at run time.
