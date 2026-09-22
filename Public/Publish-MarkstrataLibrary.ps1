@@ -36,6 +36,13 @@ function Publish-MarkstrataLibrary {
         does NOT remove its page - the page simply renders nothing - so after retiring documents
         this is what clears the leftovers. Index and home pages are never treated as orphans.
 
+        The renderer page and the site's current welcome page are never recycled. No Markdown
+        document backs the renderer - that is the point of it - so without that guard the sweep
+        reads the one page the whole site depends on as an orphan.
+
+        The sweep is skipped entirely when markdownPage.pageRootFolder is empty, because every page
+        in the library, including ones built by hand, would then qualify.
+
         Also recycles any FOLDER left empty afterwards. Removing the pages does not remove the
         folder that held them, so a retired category otherwise lingers in Site Contents as an empty
         folder. Folders are swept deepest first, because emptying a child can leave its parent
@@ -94,6 +101,23 @@ function Publish-MarkstrataLibrary {
         $librarySiteRelative = $librarySiteRelative.Substring($siteRoot.Length)
     }
     $librarySiteRelative = $librarySiteRelative.Trim("/")
+
+    # Resolve the web part BEFORE anything is built. Add-PnPPageWebPart attaches an empty control
+    # instead of failing when it matches nothing, and New-MarkstrataPage records that as one failed
+    # page and moves on - so an unresolvable component would otherwise be discovered once per
+    # document, having created a blank page for each. One round trip here costs nothing and turns
+    # a 252-page mess into a run that never starts.
+    if (-not $OrphanOnly) {
+        $probePage = Get-MarkstrataComponentProbePage
+        if ($probePage) {
+            $component = Resolve-MarkstrataComponent -Page $probePage
+            $componentLabel = [string](Get-OptionalProperty $component "Name" "")
+            Write-MarkstrataLog -Message "Building with web part '$componentLabel'." -Component "MarkdownPage"
+        }
+        else {
+            Write-MarkstrataLog -Message "No existing page to resolve the web part against; it will be resolved on the first page built." -Level Warning -Component "MarkdownPage"
+        }
+    }
 
     $startUrl = if ([string]::IsNullOrWhiteSpace($Folder)) { $librarySiteRelative } else { "$librarySiteRelative/$Folder" }
     Write-MarkstrataLog -Message "Scanning Markdown library: $startUrl" -Component "MarkdownPage"
@@ -210,11 +234,34 @@ function Publish-MarkstrataLibrary {
     # keep offering empty pages.
     $orphaned = 0
     $emptyFolders = 0
+
+    # With no page root, every page in the library sits outside the set backed by a Markdown
+    # document - the renderer, and anything built by hand - so the sweep would recycle the lot.
+    # Remove-MarkstrataLegacyPage refuses to run for the same reason; this refuses the sweep and
+    # still publishes.
+    if ($RemoveOrphan -and [string]::IsNullOrWhiteSpace((Get-MarkdownPageFolderPath -Folder ""))) {
+        Write-MarkstrataLog -Message "markdownPage.pageRootFolder is empty, so every page in the library would count as an orphan. Skipping the sweep." -Level Warning -Component "MarkdownPage"
+        $RemoveOrphan = $false
+    }
+
     if ($RemoveOrphan) {
         $expected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($document in $documents) {
             $leaf = [System.IO.Path]::GetFileNameWithoutExtension($document.Name)
             [void]$expected.Add((Get-MarkdownPageServerRelativeUrl -Folder $document.Folder -LeafName $leaf))
+        }
+
+        # The renderer serves every document through a strataDoc query string, so no .md backs it
+        # and the sweep would read it as an orphan - which is exactly how it came to be deleted.
+        # Remove-MarkstrataLegacyPage spares it and the welcome page; so does this.
+        $rendererLeaf = [string](Get-OptionalProperty $config.MarkdownPage "rendererPage" "Wiki.aspx")
+        $welcomeUrl = ""
+        try {
+            $welcomePage = [string](Get-PnPWeb -Includes WelcomePage).WelcomePage
+            if ($welcomePage) { $welcomeUrl = "{0}/{1}" -f (Get-MarkstrataSiteRelativeRoot), $welcomePage.TrimStart("/") }
+        }
+        catch {
+            Write-MarkstrataLog -Message "Could not read the site's welcome page; it is not protected from the sweep: $($_.Exception.Message)" -Level Warning -Component "MarkdownPage" -NoConsole
         }
 
         $rootSegment = Get-MarkdownPageFolderPath -Folder ""
@@ -224,6 +271,8 @@ function Publish-MarkstrataLibrary {
             if ($fileRef -notlike "*.aspx") { continue }
             if ($rootMarker -and $fileRef -notlike "*$rootMarker*") { continue }
             if ($expected.Contains($fileRef)) { continue }
+            if ([string]$item.FieldValues.FileLeafRef -eq $rendererLeaf) { continue }
+            if ($welcomeUrl -and $fileRef -eq $welcomeUrl) { continue }
 
             if ($PSCmdlet.ShouldProcess($fileRef, "Recycle orphaned page")) {
                 try {

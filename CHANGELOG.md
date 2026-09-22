@@ -4,6 +4,54 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-22
+
+### Fixed
+- **Pages published blank while reporting success.** The web part was attached by DISPLAY NAME
+  (`markdownPage.componentName`, defaulting to "Markstrata"), and the package now installs
+  "Markstrata - Markdown" and "Markstrata - HTML", so the name matched nothing.
+  `Add-PnPPageWebPart -Component` does not throw when it matches nothing: it attaches a control
+  with an empty `WebPartId`, SharePoint has no component to instantiate, and the page renders blank
+  while the command reports "Created". A production run published 121 blank pages that way.
+
+  The component is now resolved to an OBJECT through `Get-PnPAvailablePageComponents`, by
+  `componentId` and falling back to `componentName`, and every page is asserted afterwards to carry
+  it. A bare GUID string passed to `-Component` fails in the same silent way, which is why the id is
+  looked up rather than handed over. `Publish-MarkstrataLibrary` resolves once before building
+  anything, so an unresolvable component stops the run instead of failing per page.
+- **A partial user override discarded the nested keys beside it.** Writing
+  `"markdownPage": { "webPartProperties": { "allowHtml": true } }` into the user config replaced the
+  whole object, taking `colorMode`, `tocPosition`, `enableMermaid` and the other thirty-odd keys
+  with it. Every page built afterwards carried web part defaults nobody chose. Nested objects are
+  now merged key by key; arrays and scalars still replace outright.
+- **The orphan sweep recycled the renderer page.** No Markdown document backs `Wiki.aspx` - that is
+  the point of it - so `Publish-MarkstrataLibrary -RemoveOrphan` read the one page the whole site
+  depends on as an orphan and deleted it. The renderer and the site's current welcome page are now
+  spared, as they already were by `Remove-MarkstrataLegacyPage`. The sweep is also skipped entirely
+  when `markdownPage.pageRootFolder` is empty, where every page in the library - including ones
+  built by hand - would otherwise qualify.
+- **`Test-MarkstrataAccess` called a cmdlet that no longer exists.**
+  `Get-PnPAvailableClientSideComponent` is gone from PnP.PowerShell, so the web part check warned on
+  every run and told nobody anything. It now resolves the configured `componentId` against the site
+  with `Get-PnPAvailablePageComponents` and FAILS when it is absent, naming the components that are
+  installed and their ids. This is the check that would have caught the blank pages before any were
+  built.
+- **`Convert-MarkstrataLink` rewrote links inside code blocks.** A page documenting the link syntax
+  had its examples converted whenever the example target happened to resolve. Fenced blocks and
+  inline code spans are now left alone in both directions.
+
+### Changed
+- `markdownPage.componentId` is documented as what SELECTS the web part, now that the package ships
+  more than one component. Building with the HTML component instead is the same operation: put its
+  id in `componentId` and set `webPartProperties` to the keys it accepts. `componentName` is a
+  documented fallback, reported when it is used, and an error when it matches more than one
+  component. Its default is now "Markstrata - Markdown".
+- The README described `Invoke-MarkstrataRefresh` as rebuilding "renderer, indexes, and menu". It
+  runs `Publish-MarkstrataLibrary -RemoveOrphan` - a page per document - and never touches the
+  renderer, which on a single-renderer site rebuilds the page-per-document tree the renderer exists
+  to replace. The README now says what the code does, and the quick start and the unattended example
+  use the renderer path.
+
 ## [1.1.0] - 2026-09-17
 
 ### Changed

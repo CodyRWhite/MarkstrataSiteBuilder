@@ -84,6 +84,10 @@ function Convert-MarkstrataLink {
     $direction = if ($UseWikiLinks) { "PageToWiki" } elseif ($UsePageLinks) { "WikiToPage" } else { "WikiToPage" }
     Write-MarkstrataLog -Message "Converting links ($direction) across $($documentPaths.Count) document(s)." -Component "Link"
 
+    # Fenced and inline code are excluded from both directions: a page documenting the link syntax
+    # writes [[Folder/Document]] as an EXAMPLE, and converting it rewrites the documentation the
+    # moment the example target happens to resolve.
+    #
     # (?<!!) so an image reference is never matched.
     # The fragment is captured separately: a heading anchor is carried across unchanged, and
     # without this an anchored link matches neither pattern and is silently left behind.
@@ -110,7 +114,7 @@ function Convert-MarkstrataLink {
         }
 
         if ($UseWikiLinks) {
-            $text = [regex]::Replace($text, $pageLinkPattern, {
+            $text = Convert-MarkdownOutsideCode -Text $text -Pattern $pageLinkPattern -Evaluator {
                 param($match)
                 $url = $match.Groups["url"].Value
                 $display = $match.Groups["text"].Value
@@ -133,9 +137,9 @@ function Convert-MarkstrataLink {
                 # is already a bare name in the same folder.
                 if ($display -eq $relative -and -not $fragment) { return "[[$relative]]" }
                 return "[[$relative$fragment|$display]]"
-            })
+            }
         } else {
-            $text = [regex]::Replace($text, $wikiLinkPattern, {
+            $text = Convert-MarkdownOutsideCode -Text $text -Pattern $wikiLinkPattern -Evaluator {
                 param($match)
                 $rawTarget = $match.Groups["target"].Value.Trim()
                 $target = Resolve-LibraryDocumentPath -FromFolder $sourceFolder -Target $rawTarget
@@ -166,7 +170,7 @@ function Convert-MarkstrataLink {
                 }
                 $url = ConvertTo-MarkdownLinkUrl -Url (Get-MarkdownPageServerRelativeUrl -Folder $folder -LeafName $leaf)
                 return "[$display]($url$($match.Groups['fragment'].Value))"
-            })
+            }
         }
 
         $fileConverted = $script:linkTally

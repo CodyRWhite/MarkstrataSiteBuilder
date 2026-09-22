@@ -12,6 +12,12 @@ function Get-MarkstrataConfig {
         property in the override replaces the default. Documentation keys beginning '_' are
         ignored everywhere.
 
+        A NESTED object is merged key by key rather than replaced. markdownPage.webPartProperties
+        carries around forty rendering keys, so an override naming one of them used to discard the
+        rest - colorMode, tocPosition, enableMermaid and the others - and every page built
+        afterwards carried web part defaults nobody had chosen, silently. Arrays and scalars still
+        replace outright: half an array is not a meaningful merge.
+
         Keeping the user's settings in a separate file is what lets the module be updated or
         reinstalled without overwriting them - nothing writes to the shipped config.
 
@@ -34,6 +40,34 @@ function Get-MarkstrataConfig {
             throw "Required config file not found: $Path"
         }
         return (Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json)
+    }
+
+    # A JSON object, which ConvertFrom-Json hands back as a PSCustomObject. Arrays and scalars are
+    # not merged into, so they answer false and replace whatever they override.
+    function Test-SettingObject {
+        param($Value)
+        return ($Value -is [System.Management.Automation.PSCustomObject])
+    }
+
+    # Merge one setting's override over its default, recursing while both sides are objects.
+    function Merge-SettingValue {
+        param($Default, $Override)
+
+        if (-not (Test-SettingObject $Default) -or -not (Test-SettingObject $Override)) { return $Override }
+
+        $merged = [ordered]@{}
+        foreach ($property in ($Default.PSObject.Properties | Where-Object { $_.Name -notlike "_*" })) {
+            $merged[$property.Name] = $property.Value
+        }
+        foreach ($property in ($Override.PSObject.Properties | Where-Object { $_.Name -notlike "_*" })) {
+            $merged[$property.Name] = if ($merged.Contains($property.Name)) {
+                Merge-SettingValue -Default $merged[$property.Name] -Override $property.Value
+            }
+            else {
+                $property.Value
+            }
+        }
+        return [pscustomobject]$merged
     }
 
     # Strip documentation ('_'-prefixed) keys, converting an object to an ordered hashtable.
@@ -61,9 +95,17 @@ function Get-MarkstrataConfig {
             if (-not $sections.Contains($overrideSection.Name)) {
                 $sections[$overrideSection.Name] = [ordered]@{}
             }
-            $overrideSection.Value.PSObject.Properties |
-                Where-Object { $_.Name -notlike "_*" -and $null -ne $_.Value -and "$($_.Value)" -ne "" } |
-                ForEach-Object { $sections[$overrideSection.Name][$_.Name] = $_.Value }
+            # A reference to the section's table, so the merged values land in $sections.
+            $target = $sections[$overrideSection.Name]
+            foreach ($setting in ($overrideSection.Value.PSObject.Properties |
+                    Where-Object { $_.Name -notlike "_*" -and $null -ne $_.Value -and "$($_.Value)" -ne "" })) {
+                $target[$setting.Name] = if ($target.Contains($setting.Name)) {
+                    Merge-SettingValue -Default $target[$setting.Name] -Override $setting.Value
+                }
+                else {
+                    $setting.Value
+                }
+            }
         }
     }
 

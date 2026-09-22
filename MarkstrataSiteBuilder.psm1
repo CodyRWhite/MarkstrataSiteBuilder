@@ -64,6 +64,7 @@ $script:ConnectionMode    = $null   # "AppOnly" | "Interactive" - what the curre
 $script:CategoryData      = $null   # cached { Map = @{folder->display name}; List = @(ordered) }
 $script:CategoryGroupData = $null   # cached themed groups (category-groups.json, in the data folder)
 $script:CategoryGroupFile = $null   # path the cached groups were read from, for messages
+$script:ResolvedComponent = $null   # cached web part object (markdownPage.componentId) for this site
 $script:linkTally         = 0       # per-document link conversion counter (Convert-MarkstrataLink)
 
 # The URL SharePoint itself stores for a navigation "Label" - a node that renders as plain text

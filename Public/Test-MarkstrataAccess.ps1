@@ -16,8 +16,9 @@ function Test-MarkstrataAccess {
           Documents     the Markdown library, its server-relative path, and how many .md files
                         SharePoint can currently see
           Local library the folder on this machine, if one is configured
-          Web part      whether the Markstrata component is registered in the tenant app
-                        catalogue, since a page built without it renders an empty canvas
+          Web part      whether the CONFIGURED component (markdownPage.componentId) is available
+                        on this site, since a page built without it renders an empty canvas while
+                        reporting success
 
         Each check is reported separately and a failure in one does not stop the others, so a
         single run tells you everything that is wrong rather than the first thing.
@@ -135,21 +136,55 @@ function Test-MarkstrataAccess {
     }
 
     # ---- The web part -------------------------------------------------------------------------
-    # A page built without the component renders an empty canvas and reports nothing, so this is
-    # worth knowing before publishing rather than after.
-    try {
-        $componentId = [string]$config.MarkdownPage.componentId
-        $component = @(Get-PnPAvailableClientSideComponent -ErrorAction Stop) |
-            Where-Object { $_.Id -like "*$componentId*" } | Select-Object -First 1
-        if ($component) {
-            & $record "Markstrata web part" "Pass" "'$($component.Name)' is available on this site."
-        }
-        else {
-            & $record "Markstrata web part" "Fail" "Component $componentId is not available here. Install the Markstrata package in the tenant app catalogue and add it to this site."
-        }
+    # The check that matters most. A page built without the component renders an empty canvas while
+    # the build reports success, so this is the difference between finding out here and finding out
+    # after a whole library has published blank.
+    #
+    # Get-PnPAvailablePageComponents replaced Get-PnPAvailableClientSideComponent and lists what is
+    # available TO A PAGE, so it needs an existing one to ask against.
+    $componentId = ([string](Get-OptionalProperty $config.MarkdownPage "componentId" "")).Trim().Trim("{}").ToLowerInvariant()
+    $componentName = ([string](Get-OptionalProperty $config.MarkdownPage "componentName" "")).Trim()
+    $probePage = Get-MarkstrataComponentProbePage
+
+    if (-not $probePage) {
+        & $record "Markstrata web part" "Warn" "No page exists yet to enumerate the site's components against. Re-run this after New-MarkstrataRenderer."
     }
-    catch {
-        & $record "Markstrata web part" "Warn" "Could not enumerate the site's components: $($_.Exception.Message)"
+    elseif (-not $componentId) {
+        & $record "Markstrata web part" "Fail" "markdownPage.componentId is not set, so the build has no stable way to pick a web part."
+    }
+    else {
+        try {
+            $available = @(Get-PnPAvailablePageComponents -Page $probePage -ErrorAction Stop)
+            $component = $available |
+                Where-Object { (([string](Get-OptionalProperty $_ "Id" "")).Trim("{}").ToLowerInvariant()) -eq $componentId } |
+                Select-Object -First 1
+
+            if ($component) {
+                $componentLabel = [string](Get-OptionalProperty $component "Name" "")
+                & $record "Markstrata web part" "Pass" "'$componentLabel' ($componentId) is available on this site."
+            }
+            else {
+                # The package installs more than one component, so naming what IS here is what makes
+                # a wrong id fixable - the right GUID is in the message, ready to paste into config.
+                $installed = @($available |
+                    Where-Object { [string](Get-OptionalProperty $_ "Name" "") -like "*Markstrata*" } |
+                    ForEach-Object { "{0} ({1})" -f (Get-OptionalProperty $_ "Name" ""), (Get-OptionalProperty $_ "Id" "") })
+                $detail = if ($installed.Count -gt 0) {
+                    "Markstrata components on this site: $($installed -join '; ')."
+                }
+                else {
+                    "No Markstrata component is on this site - install the package in the tenant app catalogue and add it here."
+                }
+                $byName = if ($componentName -and @($available | Where-Object { [string](Get-OptionalProperty $_ "Name" "") -eq $componentName }).Count -eq 1) {
+                    " A build would fall back to componentName '$componentName', which matches, but names change - record the id."
+                }
+                else { "" }
+                & $record "Markstrata web part" "Fail" "componentId $componentId is not available here. $detail$byName"
+            }
+        }
+        catch {
+            & $record "Markstrata web part" "Warn" "Could not enumerate the site's components: $($_.Exception.Message)"
+        }
     }
 
     foreach ($check in $checks) {
