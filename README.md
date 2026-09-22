@@ -172,11 +172,18 @@ New-MarkstrataIndex                    # category and home indexes
 Update-MarkstrataNavigation            # the menu
 ```
 
-`Invoke-MarkstrataRefresh` is **not** this sequence. It regenerates the indexes, waits for
-OneDrive, then runs `Publish-MarkstrataLibrary -RemoveOrphan` - a page per document - and rebuilds
-the menu. It never touches the renderer. On a site using the single-renderer model that rebuilds
-the page-per-document tree the renderer exists to replace, so reach for it only if you actually
-want those pages.
+`Invoke-MarkstrataRefresh` runs exactly that sequence, with a wait for OneDrive between the
+indexes and the rest - because the renderer serves documents out of the library, not your local
+folder, so a menu rebuilt before the sync lands points at documents SharePoint does not have yet.
+
+```powershell
+Invoke-MarkstrataRefresh                 # indexes, sync, renderer, menu
+Invoke-MarkstrataRefresh -SetHomePage    # and land the site on the renderer
+```
+
+It does not change the site's welcome page or menu style unless you ask. It also no longer
+publishes a page per document - `Publish-MarkstrataLibrary` still does that for anyone who wants
+those pages, and `-OrphanOnly` still sweeps them.
 
 ---
 
@@ -244,8 +251,7 @@ Afterwards:
 
 ```powershell
 Connect-MarkstrataSite -Force          # now app-only
-New-MarkstrataIndex                    # what a scheduled run actually needs
-Update-MarkstrataNavigation
+Invoke-MarkstrataRefresh               # indexes, sync, renderer, menu
 ```
 
 ---
@@ -263,7 +269,7 @@ Update-MarkstrataNavigation
 | `New-MarkstrataIndex` | Generate the category and home indexes |
 | `Publish-MarkstrataLibrary` | Create a page per document (only if you want them) |
 | `Update-MarkstrataNavigation` | Rebuild the menu (contents only; `-MegaMenu`/`-CascadingMenu` set the style) |
-| `Invoke-MarkstrataRefresh` | Indexes, then a page per document, then the menu (not the renderer) |
+| `Invoke-MarkstrataRefresh` | Indexes, the renderer and the menu, waiting for the sync between |
 | `New-MarkstrataPage` | Create one page for one document |
 | `Update-MarkstrataPageSetting` | Push web part settings to existing pages |
 | `Convert-MarkstrataLink` | Convert between wiki links and page links |

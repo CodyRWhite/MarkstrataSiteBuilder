@@ -4,6 +4,29 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-22
+
+### Changed
+- **`Invoke-MarkstrataRefresh` now builds the renderer instead of a page per document.** The
+  sequence is indexes, wait for OneDrive, `New-MarkstrataRenderer`, `Update-MarkstrataNavigation` -
+  what the command's name implies and what the README quick start recommends. It previously ran
+  `Publish-MarkstrataLibrary -RemoveOrphan`, which on a site using the single renderer rebuilt the
+  very page-per-document tree the renderer exists to replace. `Publish-MarkstrataLibrary` is
+  unchanged for anyone who wants those pages, and `-OrphanOnly` still sweeps them.
+- **It no longer changes the site's welcome page on every run.** The old step 4 passed
+  `-SetHomePage` unconditionally, pointing the welcome page at the generated home index. Which page
+  a site lands on is a deliberate choice, and a routine refresh reimposing it is the same class of
+  bug as the menu style forced in 1.3.0. Pass `-SetHomePage` to set it, deliberately, and it now
+  points at the renderer.
+
+### Removed
+- `Invoke-MarkstrataRefresh -KeepOrphan`, which only meant something for the page-per-document pass
+  that is gone. Scripts passing it will need it removed.
+
+### Added
+- `Invoke-MarkstrataRefresh -SkipRenderer`, for the common case where documents have only come and
+  gone and the renderer - which serves whatever exists - needs nothing done to it.
+
 ## [1.3.0] - 2026-09-22
 
 ### Added
