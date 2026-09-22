@@ -1053,6 +1053,34 @@ Describe 'Per-run component override' {
     }
 }
 
+Describe 'The manifest version is releasable' {
+    # The release workflow tags from the manifest and takes the release body from the matching
+    # CHANGELOG section. A version bumped without an entry would fail there, after merging, where
+    # the fix is a second PR. Here it fails in the suite, before.
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:ManifestVersion = (Import-PowerShellDataFile (Join-Path $script:RepoRoot 'MarkstrataSiteBuilder.psd1')).ModuleVersion
+    }
+
+    It 'has a CHANGELOG section for the version the manifest declares' {
+        $changelog = Get-Content (Join-Path $script:RepoRoot 'CHANGELOG.md') -Raw
+        # The same expression the release workflow uses.
+        $pattern = "(?ms)^## \[" + [regex]::Escape($script:ManifestVersion) + "\][^\n]*\n(.*?)(?=^## \[|\z)"
+        $match = [regex]::Match($changelog, $pattern)
+
+        $match.Success | Should -BeTrue -Because "the release workflow takes the release notes from '## [$script:ManifestVersion]'"
+        $match.Groups[1].Value.Trim() | Should -Not -BeNullOrEmpty
+    }
+
+    It 'declares that version as the newest entry in the changelog' {
+        # A manifest behind the changelog means the newest entry never gets released; ahead means
+        # the release notes describe the wrong thing.
+        $changelog = Get-Content (Join-Path $script:RepoRoot 'CHANGELOG.md') -Raw
+        $newest = [regex]::Match($changelog, '(?m)^## \[([0-9]+\.[0-9]+\.[0-9]+)\]').Groups[1].Value
+        $newest | Should -Be $script:ManifestVersion
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }
