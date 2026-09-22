@@ -20,8 +20,9 @@
       * Media relocation, orphan sweeps and link conversion between page links and wiki links.
 
     Rendering is done by the Markstrata SharePoint Framework web part, which must be installed
-    in the tenant app catalogue. This module is an independent companion to it and is not
-    affiliated with its publisher.
+    in the tenant app catalogue. That web part is this project's companion - same author, released
+    separately because a web part deploys to a tenant app catalogue and a PowerShell module does
+    not: https://github.com/CodyRWhite/Markstrata
 
     No secrets are stored on disk. Authentication is either interactive (delegated) or app-only
     with a certificate supplied at run time.
@@ -65,6 +66,7 @@ $script:CategoryData      = $null   # cached { Map = @{folder->display name}; Li
 $script:CategoryGroupData = $null   # cached themed groups (category-groups.json, in the data folder)
 $script:CategoryGroupFile = $null   # path the cached groups were read from, for messages
 $script:ResolvedComponent = $null   # cached web part object (markdownPage.componentId) for this site
+$script:ResolvedComponentKey = $null # what that cache entry was resolved FOR, so an override re-resolves
 $script:linkTally         = 0       # per-document link conversion counter (Convert-MarkstrataLink)
 
 # The URL SharePoint itself stores for a navigation "Label" - a node that renders as plain text

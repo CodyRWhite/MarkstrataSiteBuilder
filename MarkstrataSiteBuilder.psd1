@@ -23,7 +23,7 @@
     Copyright         = 'MIT licensed. See LICENSE.'
 
     # Description of the functionality provided by this module
-    Description       = 'Publishes a SharePoint Online document library full of Markdown files as a browsable site: one renderer page serving every document through a query string, generated category and home indexes, and a themed navigation menu built from the folder structure. Rendering is done by the Markstrata SharePoint Framework web part; this is an independent companion tool and is not affiliated with its publisher. Includes a first-run bootstrap that creates the Entra ID app registration it signs in with.'
+    Description       = 'Publishes a SharePoint Online document library full of Markdown files as a browsable site: one renderer page serving every document through a query string, generated category and home indexes, and a themed navigation menu built from the folder structure. Rendering is done by the Markstrata SharePoint Framework web part (https://github.com/CodyRWhite/Markstrata), the companion project to this one, released separately because a web part deploys to a tenant app catalogue and a PowerShell module does not. Includes a first-run bootstrap that creates the Entra ID app registration it signs in with.'
 
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '7.2'
@@ -73,6 +73,9 @@
 - A navigation rebuild no longer forces the site's menu style to mega menu.
   Style changes only on -MegaMenu or -CascadingMenu; navigation.megaMenu is
   removed. Behaviour change for anyone running Update-MarkstrataNavigation.
+- -ComponentId on the build commands and Test-MarkstrataAccess, so a run can
+  target either installed web part without a config edit.
+- The resolved-component cache is keyed on what was asked for.
 
 1.2.0
 - Pages no longer publish blank: the web part is resolved by componentId to a

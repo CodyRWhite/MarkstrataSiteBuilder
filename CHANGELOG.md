@@ -6,17 +6,25 @@ All notable changes to this project are recorded here. The format follows
 
 ## [1.3.0] - 2026-09-22
 
-### Fixed
-- **A navigation rebuild forced the site's menu style to mega menu on every run.**
-  `navigation.megaMenu` defaulted to true and there was no switch to opt out, so
-  `Update-MarkstrataNavigation` - run to update menu LINKS - silently reverted any site an
-  administrator had deliberately switched to a cascading menu in the SharePoint UI. Nobody connected
-  the two, because the call used `-ErrorAction SilentlyContinue` and the command's output said
-  nothing about the style at all.
+### Added
+- **`-ComponentId` on the build commands and on `Test-MarkstrataAccess`.** The package installs more
+  than one component, and until now choosing between them meant editing config between runs.
+  `New-MarkstrataRenderer`, `New-MarkstrataPage` and `Publish-MarkstrataLibrary` take an id for a
+  single run, so one library can keep some documents on each. `Test-MarkstrataAccess -ComponentId`
+  confirms a component is available on the site before anything is built with it.
 
-  Rebuilding a menu's contents must never change its style. The style is now changed only when
-  asked for, by the new `-MegaMenu` and `-CascadingMenu` switches (mutually exclusive). With
-  neither, the current value is read, logged and left alone.
+  An id passed explicitly never falls back to `componentName`: asking for one component and silently
+  getting another would build pages that look fine and render with the wrong web part.
+
+- **The HTML component's id and property defaults are recorded in the shipped config**, under the
+  documentation keys `_htmlComponentId` and `_htmlWebPartProperties`, read from the web part's own
+  manifest rather than guessed. The loader ignores `_`-prefixed keys, so they are reference data and
+  cannot change a build. Switching components is now a copy rather than a lookup.
+
+  Noted with them, because it is the thing that decides whether switching is useful: the HTML
+  component loads `.html` and `.htm` documents, and this module's library walk finds only `.md`.
+  Attaching either component works identically; publishing a whole library with the HTML one does
+  not yet, and the README says so.
 
 ### Changed
 - **`navigation.megaMenu` has been removed** and is no longer read. A key left in your own config is
@@ -28,6 +36,26 @@ All notable changes to this project are recorded here. The format follows
   made the original behaviour so hard to spot.
 - A failed style change now warns with the reason instead of being swallowed by
   `-ErrorAction SilentlyContinue`. It still does not fail the rebuild.
+
+- The Markstrata web part is described as this project's companion rather than a third party's. It
+  is the same author's, released separately because a web part deploys to a tenant app catalogue and
+  a PowerShell module does not, and the README, module header and manifest now link to it.
+### Fixed
+- **A navigation rebuild forced the site's menu style to mega menu on every run.**
+  `navigation.megaMenu` defaulted to true and there was no switch to opt out, so
+  `Update-MarkstrataNavigation` - run to update menu LINKS - silently reverted any site an
+  administrator had deliberately switched to a cascading menu in the SharePoint UI. Nobody connected
+  the two, because the call used `-ErrorAction SilentlyContinue` and the command's output said
+  nothing about the style at all.
+
+  Rebuilding a menu's contents must never change its style. The style is now changed only when
+  asked for, by the new `-MegaMenu` and `-CascadingMenu` switches (mutually exclusive). With
+  neither, the current value is read, logged and left alone.
+- The session's resolved-component cache answered "something was resolved once" rather than
+  remembering WHAT was resolved. Two runs in one session asking for different components would have
+  received the first one's - silently, since either attaches perfectly well. The cache is now keyed
+  on what was asked for.
+
 
 ## [1.2.0] - 2026-09-22
 

@@ -28,6 +28,9 @@ function New-MarkstrataRenderer {
         Also make this the site's welcome page. Worth doing once the per-document pages are
         retired, since the old home page will no longer exist.
 
+    .PARAMETER ComponentId
+        Build the renderer with a specific web part instead of the configured one.
+
     .PARAMETER Force
         Recreate the page if it already exists.
 
@@ -45,6 +48,8 @@ function New-MarkstrataRenderer {
         [string]$DefaultDocument,
 
         [switch]$SetHomePage,
+
+        [string]$ComponentId = "",
 
         [switch]$Force
     )
@@ -102,7 +107,7 @@ function New-MarkstrataRenderer {
     # A component OBJECT, not a name or a GUID: -Component attaches an empty control rather than
     # failing when it matches nothing, which would leave the one page the whole site depends on
     # rendering blank. Assert-MarkstrataWebPart is what turns that into an error.
-    $component = Resolve-MarkstrataComponent -Page $rendererLeaf
+    $component = Resolve-MarkstrataComponent -Page $rendererLeaf -ComponentId $ComponentId
     $null = Add-PnPPageWebPart -Page $rendererLeaf -Component $component `
         -WebPartProperties ($properties | ConvertTo-Json -Depth 6 -Compress) -ErrorAction Stop
     Assert-MarkstrataWebPart -Page $rendererLeaf -ComponentId ([string](Get-OptionalProperty $component "Id" ""))

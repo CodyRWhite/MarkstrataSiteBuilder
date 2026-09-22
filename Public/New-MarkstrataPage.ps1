@@ -31,6 +31,10 @@ function New-MarkstrataPage {
     .PARAMETER Length
         Optional file size in bytes, recorded in the web part's cached fileMetadata.
 
+    .PARAMETER ComponentId
+        Build this page with a specific web part instead of the configured one. The package installs
+        more than one component, and this is what lets a run target the other without editing config.
+
     .PARAMETER Force
         Recreate the page even when it already exists. Without it an existing page is left alone.
 
@@ -58,6 +62,8 @@ function New-MarkstrataPage {
         [string]$Category = "",
 
         [long]$Length = 0,
+
+        [string]$ComponentId = "",
 
         [switch]$Force
     )
@@ -133,7 +139,7 @@ function New-MarkstrataPage {
             # Resolved to a component OBJECT, never a name or a GUID string: -Component silently
             # attaches an empty control when it matches nothing, and the page then renders blank
             # while this command reports success. The assert afterwards is what makes that an error.
-            $component = Resolve-MarkstrataComponent -Page $pageName
+            $component = Resolve-MarkstrataComponent -Page $pageName -ComponentId $ComponentId
             $null = Add-PnPPageWebPart -Page $pageName -Component $component -WebPartProperties $propertiesJson -ErrorAction Stop
             Assert-MarkstrataWebPart -Page $pageName -ComponentId ([string](Get-OptionalProperty $component "Id" ""))
 
