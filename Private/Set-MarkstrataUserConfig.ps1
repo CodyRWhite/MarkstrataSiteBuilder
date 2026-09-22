@@ -65,5 +65,7 @@ function Set-MarkstrataUserConfig {
 
     # The cached config is now stale, and the next caller would carry on with the old values.
     $script:Config = $null
+    # markdownPage.componentId may have just changed, and the resolved web part was chosen by it.
+    $script:ResolvedComponent = $null
     return $script:UserOverride
 }

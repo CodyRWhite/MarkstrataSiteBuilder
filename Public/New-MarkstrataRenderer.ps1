@@ -98,8 +98,14 @@ function New-MarkstrataRenderer {
     if ([string]::IsNullOrWhiteSpace($layoutType)) { $layoutType = "SingleWebPartAppPage" }
 
     $null = Add-PnPPage -Name $rendererLeaf -LayoutType $layoutType -ErrorAction Stop
-    $null = Add-PnPPageWebPart -Page $rendererLeaf -Component ([string]$config.MarkdownPage.componentName) `
+
+    # A component OBJECT, not a name or a GUID: -Component attaches an empty control rather than
+    # failing when it matches nothing, which would leave the one page the whole site depends on
+    # rendering blank. Assert-MarkstrataWebPart is what turns that into an error.
+    $component = Resolve-MarkstrataComponent -Page $rendererLeaf
+    $null = Add-PnPPageWebPart -Page $rendererLeaf -Component $component `
         -WebPartProperties ($properties | ConvertTo-Json -Depth 6 -Compress) -ErrorAction Stop
+    Assert-MarkstrataWebPart -Page $rendererLeaf -ComponentId ([string](Get-OptionalProperty $component "Id" ""))
 
     $setArguments = @{ Identity = $rendererLeaf; Title = [string]$config.MarkdownIndex.homeTitle; ErrorAction = "Stop" }
     if ([bool]$config.MarkdownPage.publish) { $setArguments["Publish"] = $true }

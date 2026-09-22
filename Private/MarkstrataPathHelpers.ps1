@@ -431,3 +431,64 @@ function Get-MarkdownFileServerRelativeUrl {
     $segments += $FileName
     return ($segments -join "/")
 }
+
+function Convert-MarkdownOutsideCode {
+    <#
+    .SYNOPSIS
+        Apply a regex replacement to a Markdown document, leaving code untouched.
+
+    .DESCRIPTION
+        A page that documents the link syntax writes [[Folder/Document]] or a page URL as an
+        EXAMPLE. A plain replace rewrites those examples the moment the example target happens to
+        resolve, so the documentation for the syntax silently stops showing the syntax.
+
+        Fenced blocks (``` or ~~~) and inline spans (`...`) are copied through verbatim and the
+        replacement runs only on what is between them. The closing fence must be the same character
+        repeated at least as many times as the opening one, and an unclosed fence runs to the end of
+        the document, both as CommonMark has it.
+
+        The evaluator keeps seeing the variables of the function that defined it, which is what lets
+        callers keep using their own counters and lookup tables.
+
+    .PARAMETER Text
+        The whole document.
+
+    .PARAMETER Pattern
+        Regex to replace outside code.
+
+    .PARAMETER Evaluator
+        MatchEvaluator scriptblock, as [regex]::Replace takes.
+
+    .OUTPUTS
+        String - the document with the replacement applied outside code only.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory)][string]$Pattern,
+        [Parameter(Mandatory)][scriptblock]$Evaluator
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+
+    # Fenced first: a fence can contain backticks, and matching inline spans first would cut one in
+    # half. \k<fence> holds the closing run to the opening one; \z ends an unclosed block.
+    $codePattern = '(?m)^[ ]{0,3}(?<fence>`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?(?:^[ ]{0,3}\k<fence>[ \t]*\r?$|\z)' +
+                   '|(?<tick>`+)[\s\S]*?\k<tick>'
+
+    $builder = [System.Text.StringBuilder]::new()
+    $position = 0
+    foreach ($code in [regex]::Matches($Text, $codePattern)) {
+        if ($code.Index -gt $position) {
+            [void]$builder.Append([regex]::Replace($Text.Substring($position, $code.Index - $position), $Pattern, $Evaluator))
+        }
+        [void]$builder.Append($code.Value)
+        $position = $code.Index + $code.Length
+    }
+    if ($position -lt $Text.Length) {
+        [void]$builder.Append([regex]::Replace($Text.Substring($position), $Pattern, $Evaluator))
+    }
+
+    return $builder.ToString()
+}

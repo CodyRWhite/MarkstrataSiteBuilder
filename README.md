@@ -10,7 +10,9 @@ on the way in, so editing a file is all it takes to change what the site shows.
 Import-Module .\MarkstrataSiteBuilder.psd1
 Initialize-MarkstrataConfig          # asks for the site and the folder
 Connect-MarkstrataSite               # offers to create the app registration it signs in with
-Invoke-MarkstrataRefresh             # builds the whole site
+New-MarkstrataRenderer -SetHomePage  # the one page that renders every document
+New-MarkstrataIndex                  # category and home indexes
+Update-MarkstrataNavigation          # the menu
 ```
 
 ---
@@ -109,22 +111,41 @@ Test-MarkstrataAccess
 ```
 
 Read-only. It reports the connection, write access, both libraries, the local folder and whether
-the Markstrata web part is actually available on the site - the last one being the difference
-between a working page and a blank canvas.
+the web part named by `markdownPage.componentId` is actually available on the site - the last one
+being the difference between a working page and a blank canvas. Run it before a first publish: a
+page built without its component renders blank while the build reports success.
 
-### 4. Build
+#### Which web part
+
+The Markstrata package installs more than one component - `Markstrata - Markdown` and
+`Markstrata - HTML`. `markdownPage.componentId` picks the one every page is built with, by GUID,
+because display names have already changed once and a bare `Markstrata` now matches neither.
+
+Building with the other component is the same operation: put its id in `componentId` and set
+`webPartProperties` to the keys that component accepts. Nothing else differs. To list what a site
+has:
 
 ```powershell
-Invoke-MarkstrataRefresh
+Get-PnPAvailablePageComponents -Page Wiki.aspx |
+    Where-Object Name -like "*Markstrata*" | Select-Object Name, Id
 ```
 
-Or step by step:
+`componentName` is a fallback used only when the id matches nothing, and a build that falls back
+says so. A name matching two components is an error rather than a guess.
+
+### 4. Build
 
 ```powershell
 New-MarkstrataRenderer -SetHomePage    # the single renderer page
 New-MarkstrataIndex                    # category and home indexes
 Update-MarkstrataNavigation            # the menu
 ```
+
+`Invoke-MarkstrataRefresh` is **not** this sequence. It regenerates the indexes, waits for
+OneDrive, then runs `Publish-MarkstrataLibrary -RemoveOrphan` - a page per document - and rebuilds
+the menu. It never touches the renderer. On a site using the single-renderer model that rebuilds
+the page-per-document tree the renderer exists to replace, so reach for it only if you actually
+want those pages.
 
 ---
 
@@ -140,7 +161,7 @@ New-MarkstrataIndex
 Update-MarkstrataNavigation
 ```
 
-or `Invoke-MarkstrataRefresh` for both plus the renderer.
+The renderer page itself needs nothing: it already serves whatever documents exist.
 
 ### Organising the menu
 
@@ -192,7 +213,8 @@ Afterwards:
 
 ```powershell
 Connect-MarkstrataSite -Force          # now app-only
-Invoke-MarkstrataRefresh
+New-MarkstrataIndex                    # what a scheduled run actually needs
+Update-MarkstrataNavigation
 ```
 
 ---
@@ -210,7 +232,7 @@ Invoke-MarkstrataRefresh
 | `New-MarkstrataIndex` | Generate the category and home indexes |
 | `Publish-MarkstrataLibrary` | Create a page per document (only if you want them) |
 | `Update-MarkstrataNavigation` | Rebuild the menu |
-| `Invoke-MarkstrataRefresh` | Renderer, indexes and menu in one run |
+| `Invoke-MarkstrataRefresh` | Indexes, then a page per document, then the menu (not the renderer) |
 | `New-MarkstrataPage` | Create one page for one document |
 | `Update-MarkstrataPageSetting` | Push web part settings to existing pages |
 | `Convert-MarkstrataLink` | Convert between wiki links and page links |

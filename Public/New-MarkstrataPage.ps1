@@ -9,6 +9,9 @@ function New-MarkstrataPage {
         of the content: editing the Markdown file - locally through the synced folder, or in the
         browser - updates the page, which is the whole point of this layout.
 
+        Which web part is markdownPage.componentId's decision - the package installs more than one -
+        and the page is verified to carry it before the build is called a success.
+
         SingleWebPartAppPage also gives the canvas its full width and no page banner, so the
         rendered document is the whole page rather than a column inside one.
 
@@ -127,8 +130,12 @@ function New-MarkstrataPage {
             if ([string]::IsNullOrWhiteSpace($layoutType)) { $layoutType = "SingleWebPartAppPage" }
             $null = Add-PnPPage -Name $pageName -LayoutType $layoutType -ErrorAction Stop
 
-            $component = [string]$config.MarkdownPage.componentName
+            # Resolved to a component OBJECT, never a name or a GUID string: -Component silently
+            # attaches an empty control when it matches nothing, and the page then renders blank
+            # while this command reports success. The assert afterwards is what makes that an error.
+            $component = Resolve-MarkstrataComponent -Page $pageName
             $null = Add-PnPPageWebPart -Page $pageName -Component $component -WebPartProperties $propertiesJson -ErrorAction Stop
+            Assert-MarkstrataWebPart -Page $pageName -ComponentId ([string](Get-OptionalProperty $component "Id" ""))
 
             $setPageArguments = @{ Identity = $pageName; Title = $Title; ErrorAction = "Stop" }
             if ([bool]$config.MarkdownPage.publish) { $setPageArguments["Publish"] = $true }

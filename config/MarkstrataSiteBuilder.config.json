@@ -41,10 +41,13 @@
     "overwriteExisting": false
   },
 
-  "_markdownPage": "How the SharePoint side is rendered. componentId identifies the installed Markstrata web part - it is the same GUID in every tenant, so it rarely needs changing; componentName is only used in messages. layoutType SingleWebPartAppPage gives a full-width canvas with no page banner.",
+  "_markdownPage": "How the SharePoint side is rendered. layoutType SingleWebPartAppPage gives a full-width canvas with no page banner.",
   "markdownPage": {
-    "componentName": "Markstrata",
+    "_componentId": "WHICH web part every page is built with. The Markstrata package installs more than one component - 'Markstrata - Markdown' and 'Markstrata - HTML' - so this GUID, not the name, is what picks one. It is the same GUID in every tenant. To build with the other component, put ITS id here and set webPartProperties to what that component accepts; everything else about the build is identical. Get the ids for a site with: Get-PnPAvailablePageComponents -Page <an existing page> | Where-Object Name -like '*Markstrata*' | Select-Object Name, Id. Test-MarkstrataAccess fails when the id configured here is not on the site.",
     "componentId": "74aecd51-7619-4ca6-b81a-6c670d6098b3",
+
+    "_componentName": "Fallback only, used when componentId matches nothing, and reported in messages. Display names change - a bare 'Markstrata' matches neither component now - so a build that falls back to this one logs a warning telling you to record the id. A name matching more than one component is an error rather than a guess.",
+    "componentName": "Markstrata - Markdown",
 
     "_rendererPage": "Leaf name of the SINGLE page that renders the whole library. The web part accepts a strataDoc query parameter naming the document to show, so one page serves every document: /sites/<site>/SitePages/Wiki.aspx?strataDoc=Alpha/Alpha.md. That removes the need for a page per document, and with it most of the deployment time. The page lives at the root of the pages library and its own selectedFile is the home index, so visiting it with no query string shows the home page.",
     "rendererPage": "Wiki.aspx",
@@ -60,7 +63,7 @@
     "publish": true,
     "overwriteExisting": true,
 
-    "_webPartProperties": "Rendering configuration copied verbatim onto the renderer page: theme, table of contents, syntax highlighting, mermaid, math. Anything the web part accepts can be set here. contentSource must stay 'library'; selectedLibrary/selectedFolder/selectedFile are filled in per page and any values given here for them are ignored.",
+    "_webPartProperties": "Rendering configuration copied verbatim onto the renderer page: theme, table of contents, syntax highlighting, mermaid, math. Anything the web part accepts can be set here, and these keys are the Markdown component's - point componentId at a different component and this object is what you change with it. contentSource must stay 'library'; selectedLibrary/selectedFolder/selectedFile are filled in per page and any values given here for them are ignored. Your override in %LOCALAPPDATA% is merged into this object key by key, so naming one key keeps the rest.",
     "webPartProperties": {
       "allowHtml": false,
       "backToTop": "left",

@@ -8,7 +8,7 @@
     RootModule        = 'MarkstrataSiteBuilder.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.2.0'
 
     # ID used to uniquely identify this module
     GUID              = 'c7f0a9b4-3d21-4a6e-9f18-2b5c6d8e4a10'
@@ -69,6 +69,16 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+1.2.0
+- Pages no longer publish blank: the web part is resolved by componentId to a
+  component object and every page is verified to carry it. The package now
+  installs more than one component, and a display name matched neither.
+- A partial user override no longer discards the nested keys beside it.
+- The orphan sweep no longer recycles the renderer page.
+- Test-MarkstrataAccess checks the configured component against the site with
+  the cmdlet that still exists.
+- Link conversion leaves fenced and inline code alone.
+
 1.1.0
 - categories.json and category-groups.json are read from, and created in,
   %LOCALAPPDATA%\MarkstrataSiteBuilder. In a module folder they could not be

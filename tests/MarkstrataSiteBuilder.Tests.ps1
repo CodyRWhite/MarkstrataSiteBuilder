@@ -648,6 +648,252 @@ Describe 'Editable files live under the user profile' {
     }
 }
 
+Describe 'Web part resolution' {
+    # The regression that bit: Add-PnPPageWebPart does not throw when -Component matches nothing.
+    # It attaches a control with an EMPTY WebPartId, SharePoint has no component to instantiate,
+    # and the page renders blank while the build reports "Created". A production run published 121
+    # blank pages that way. Assert-MarkstrataWebPart is the only thing standing between that and a
+    # green run, so it is tested against the exact shapes a failed attach leaves behind.
+    BeforeAll {
+        # Stand in for Get-PnPPage. Each case is the Controls collection of one page.
+        $script:MakeControls = {
+            param($WebPartIds)
+            $controls = foreach ($id in $WebPartIds) { [pscustomobject]@{ WebPartId = $id } }
+            [pscustomobject]@{ Controls = @($controls) }
+        }
+    }
+
+    It 'treats a control with an empty WebPartId as a failure' {
+        $page = & $script:MakeControls @('')
+        Mock -CommandName Get-PnPPage -ModuleName MarkstrataSiteBuilder -MockWith { $page }.GetNewClosure()
+
+        { & $script:Module { Assert-MarkstrataWebPart -Page 'Docs/Alpha/Page One.aspx' } } |
+            Should -Throw -ExpectedMessage '*render blank*'
+    }
+
+    It 'treats an all-zero WebPartId as a failure' {
+        # What an unmatched control carries on some builds, rather than an empty string.
+        $page = & $script:MakeControls @('00000000-0000-0000-0000-000000000000')
+        Mock -CommandName Get-PnPPage -ModuleName MarkstrataSiteBuilder -MockWith { $page }.GetNewClosure()
+
+        { & $script:Module { Assert-MarkstrataWebPart -Page 'Docs/Alpha/Page One.aspx' } } |
+            Should -Throw -ExpectedMessage '*render blank*'
+    }
+
+    It 'treats a page with no controls at all as a failure' {
+        $page = [pscustomobject]@{ Controls = @() }
+        Mock -CommandName Get-PnPPage -ModuleName MarkstrataSiteBuilder -MockWith { $page }.GetNewClosure()
+
+        { & $script:Module { Assert-MarkstrataWebPart -Page 'Docs/Alpha/Page One.aspx' } } | Should -Throw
+    }
+
+    It 'accepts a control carrying the configured component id' {
+        $page = & $script:MakeControls @('{74AECD51-7619-4CA6-B81A-6C670D6098B3}')
+        Mock -CommandName Get-PnPPage -ModuleName MarkstrataSiteBuilder -MockWith { $page }.GetNewClosure()
+
+        # Braces and case differ between what the API returns and what config holds; both sides
+        # are normalised before comparing, so this has to pass.
+        { & $script:Module {
+                Assert-MarkstrataWebPart -Page 'Docs/Alpha/Page One.aspx' `
+                    -ComponentId '74aecd51-7619-4ca6-b81a-6c670d6098b3'
+            } } | Should -Not -Throw
+    }
+
+    It 'rejects a page carrying a DIFFERENT component' {
+        # The other half of the new plugin: attaching "Markstrata - HTML" where the config asked
+        # for the Markdown component is a silent mis-build, not a success.
+        $page = & $script:MakeControls @('11111111-2222-3333-4444-555555555555')
+        Mock -CommandName Get-PnPPage -ModuleName MarkstrataSiteBuilder -MockWith { $page }.GetNewClosure()
+
+        { & $script:Module {
+                Assert-MarkstrataWebPart -Page 'Docs/Alpha/Page One.aspx' `
+                    -ComponentId '74aecd51-7619-4ca6-b81a-6c670d6098b3'
+            } } | Should -Throw -ExpectedMessage '*not the configured component*'
+    }
+
+    It 'resolves the component by id, not by display name' {
+        # componentName is "Markstrata - Markdown" here and BOTH installed components carry a name
+        # that a looser match would accept. Only the id picks the right one.
+        $available = @(
+            [pscustomobject]@{ Name = 'Markstrata - HTML';     Id = '{11111111-2222-3333-4444-555555555555}' }
+            [pscustomobject]@{ Name = 'Markstrata - Markdown'; Id = '{74AECD51-7619-4CA6-B81A-6C670D6098B3}' }
+        )
+        Mock -CommandName Get-PnPAvailablePageComponents -ModuleName MarkstrataSiteBuilder -MockWith { $available }.GetNewClosure()
+
+        $resolved = & $script:Module {
+            $script:ResolvedComponent = $null
+            Resolve-MarkstrataComponent -Page 'Wiki.aspx'
+        }
+        $resolved.Name | Should -Be 'Markstrata - Markdown'
+    }
+
+    It 'names what IS installed when nothing matches' {
+        # The error has to carry the ids actually on the site: that is what makes a wrong config
+        # fixable without a round trip through the SharePoint admin centre.
+        $available = @(
+            [pscustomobject]@{ Name = 'Markstrata - HTML'; Id = '{11111111-2222-3333-4444-555555555555}' }
+        )
+        Mock -CommandName Get-PnPAvailablePageComponents -ModuleName MarkstrataSiteBuilder -MockWith { $available }.GetNewClosure()
+
+        { & $script:Module {
+                $script:ResolvedComponent = $null
+                Resolve-MarkstrataComponent -Page 'Wiki.aspx'
+            } } | Should -Throw -ExpectedMessage '*Markstrata - HTML*'
+    }
+
+    It 'refuses a display name that matches more than one component' {
+        # A bare "Markstrata" against two components: picking the first would build the whole
+        # library with whichever one happened to sort first.
+        $available = @(
+            [pscustomobject]@{ Name = 'Markstrata'; Id = '{AAAAAAAA-0000-0000-0000-000000000001}' }
+            [pscustomobject]@{ Name = 'Markstrata'; Id = '{BBBBBBBB-0000-0000-0000-000000000002}' }
+        )
+        Mock -CommandName Get-PnPAvailablePageComponents -ModuleName MarkstrataSiteBuilder -MockWith { $available }.GetNewClosure()
+
+        { & $script:Module {
+                $script:ResolvedComponent = $null
+                $originalId = $script:Config.MarkdownPage.componentId
+                $originalName = $script:Config.MarkdownPage.componentName
+                $script:Config.MarkdownPage.componentId = 'no-such-id'
+                $script:Config.MarkdownPage.componentName = 'Markstrata'
+                try { Resolve-MarkstrataComponent -Page 'Wiki.aspx' }
+                finally {
+                    $script:Config.MarkdownPage.componentId = $originalId
+                    $script:Config.MarkdownPage.componentName = $originalName
+                }
+            } } | Should -Throw -ExpectedMessage '*matches 2 components*'
+    }
+
+    AfterAll {
+        & $script:Module { $script:ResolvedComponent = $null }
+    }
+}
+
+Describe 'Link conversion leaves code alone' {
+    # A page documenting the link syntax writes [[Folder/Document]] as an EXAMPLE. Converting it
+    # rewrites the documentation for the syntax the moment the example target happens to resolve,
+    # which is silent and only noticed by a reader.
+    BeforeAll {
+        $script:CodeRoot = Join-Path $TestDrive 'codeblocks'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:CodeRoot 'Alpha\Section') | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:CodeRoot 'Beta') | Out-Null
+        Set-Content -Encoding utf8NoBOM -LiteralPath (Join-Path $script:CodeRoot 'Alpha\Section\Page One.md') -Value '# Page One'
+        $script:CodeSubject = Join-Path $script:CodeRoot 'Beta\Syntax.md'
+    }
+
+    BeforeEach {
+        # Every link below points at a document that DOES exist, so each one would convert if the
+        # code fences were not honoured.
+        Set-Content -Encoding utf8NoBOM -LiteralPath $script:CodeSubject -Value @'
+# Link syntax
+
+A real link: [Read Page One](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)
+
+```markdown
+[Read Page One](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)
+```
+
+Inline: `[Read Page One](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)`
+
+~~~
+[Read Page One](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)
+~~~
+'@
+    }
+
+    It 'converts the prose link but not the fenced example' {
+        Convert-MarkstrataLink -UseWikiLinks -LibraryRoot $script:CodeRoot | Out-Null
+        $text = Get-Content $script:CodeSubject -Raw
+
+        # One conversion in the prose...
+        $text | Should -Match '\[\[\.\./Alpha/Section/Page One\|Read Page One\]\]'
+        # ...and the three examples still show the syntax they are documenting.
+        ([regex]::Matches($text, [regex]::Escape('](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)'))).Count |
+            Should -Be 3
+    }
+
+    It 'leaves a wiki-link example inside a fence alone when converting back' {
+        Set-Content -Encoding utf8NoBOM -LiteralPath $script:CodeSubject -Value @'
+# Link syntax
+
+A real link: [[../Alpha/Section/Page One|Read Page One]]
+
+```markdown
+[[../Alpha/Section/Page One|Read Page One]]
+```
+'@
+        Convert-MarkstrataLink -UsePageLinks -LibraryRoot $script:CodeRoot | Out-Null
+        $text = Get-Content $script:CodeSubject -Raw
+
+        ([regex]::Matches($text, [regex]::Escape('[[../Alpha/Section/Page One|Read Page One]]'))).Count |
+            Should -Be 1
+        $text | Should -Match '\[Read Page One\]\(/sites/docs/SitePages/Docs/Alpha/Section/Page%20One\.aspx\)'
+    }
+
+    It 'still converts a document with no code in it at all' {
+        # The code-aware path must not change the ordinary case.
+        $plain = Join-Path $script:CodeRoot 'Beta\Plain.md'
+        Set-Content -Encoding utf8NoBOM -LiteralPath $plain `
+            -Value '[Read Page One](/sites/docs/SitePages/Docs/Alpha/Section/Page%20One.aspx)'
+        Convert-MarkstrataLink -UseWikiLinks -LibraryRoot $script:CodeRoot | Out-Null
+        (Get-Content $plain -Raw) | Should -Match '\[\['
+        Remove-Item -LiteralPath $plain -Force
+    }
+}
+
+Describe 'User config merges into nested objects' {
+    # markdownPage.webPartProperties carries around forty rendering keys. Overriding one used to
+    # replace the whole object, so a config naming allowHtml silently dropped colorMode,
+    # tocPosition, enableMermaid and the rest - and every page built afterwards carried web part
+    # defaults nobody chose.
+    BeforeAll {
+        $script:MergeState = & $script:Module {
+            [pscustomobject]@{ UserOverride = $script:UserOverride; Config = $script:Config }
+        }
+        $script:MergeOverride = Join-Path $TestDrive 'merge-config.json'
+        & $script:Module { param($Path) $script:UserOverride = $Path } $script:MergeOverride
+    }
+
+    AfterAll {
+        & $script:Module {
+            param($State)
+            $script:UserOverride = $State.UserOverride
+            $script:Config = $State.Config
+        } $script:MergeState
+    }
+
+    It 'keeps the sibling keys of a nested object the override only touches one of' {
+        Set-Content -LiteralPath $script:MergeOverride -Encoding utf8NoBOM -Value @'
+{ "markdownPage": { "webPartProperties": { "allowHtml": true } } }
+'@
+        $resolved = & $script:Module { Get-MarkstrataConfig -Force }
+        $properties = $resolved.MarkdownPage.webPartProperties
+
+        $properties.allowHtml | Should -BeTrue          # the override won
+        $properties.colorMode | Should -Be 'dark'       # and the rest survived
+        $properties.tocPosition | Should -Be 'left'
+        $properties.enableMermaid | Should -BeTrue
+        @($properties.PSObject.Properties).Count | Should -BeGreaterThan 30
+    }
+
+    It 'still replaces a scalar outright' {
+        Set-Content -LiteralPath $script:MergeOverride -Encoding utf8NoBOM -Value @'
+{ "markdownPage": { "rendererPage": "Docs.aspx" } }
+'@
+        $resolved = & $script:Module { Get-MarkstrataConfig -Force }
+        $resolved.MarkdownPage.rendererPage | Should -Be 'Docs.aspx'
+    }
+
+    It 'merges a nested object the defaults do not have at all' {
+        Set-Content -LiteralPath $script:MergeOverride -Encoding utf8NoBOM -Value @'
+{ "markdownPage": { "webPartProperties": { "brandNewSetting": "x" } } }
+'@
+        $resolved = & $script:Module { Get-MarkstrataConfig -Force }
+        $resolved.MarkdownPage.webPartProperties.brandNewSetting | Should -Be 'x'
+        $resolved.MarkdownPage.webPartProperties.colorMode | Should -Be 'dark'
+    }
+}
+
 AfterAll {
     Remove-Module MarkstrataSiteBuilder -ErrorAction SilentlyContinue
 }
