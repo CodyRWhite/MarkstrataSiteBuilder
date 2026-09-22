@@ -134,12 +134,21 @@ Both are recorded in the shipped config: the HTML component's id and its propert
 under the documentation keys `_htmlComponentId` and `_htmlWebPartProperties`, which the loader
 ignores, so switching is a copy rather than a lookup.
 
-**What "supported the same way" does and does not cover.** Attaching either component to a page
-works identically - the resolve, the assert, `-ComponentId`, the readiness check. But the HTML
-component loads `.html` and `.htm` documents, and this module's library walk finds only `.md`, so
-pointing it at a Markdown library gives you pages whose web part has nothing it can render. Until
-the walk is extension-aware, the HTML component is usable here for individual pages you point at
-`.html` documents yourself, not for publishing a whole library.
+**Pointing a library at the HTML component.** The two components read different files, so a
+library declares what it holds:
+
+```jsonc
+"markdown": { "documentExtensions": [".html", ".htm"] },
+"markdownPage": { "componentId": "36ac307a-2d6b-439b-8ce0-82640db75ecb" },
+"markdownIndex": { "indexFileName": "{Category}.html", "homeFileName": "Home.html" }
+```
+
+The walk, the menu and the sync wait all follow `documentExtensions`. The index names have to end
+in one of them too, or the generated indexes are published but never recognised AS indexes -
+`Test-MarkstrataAccess` checks that pairing and fails when it does not hold.
+
+`Convert-MarkstrataLink` and the media commands stay Markdown-only: wiki links and Markdown image
+syntax are features of Markdown, not of the library.
 
 To list what a site has:
 

@@ -26,6 +26,9 @@
     "libraryServerRelativeUrl": "",
     "documentLibrary": "Documents",
 
+    "_documentExtensions": "Which files in the library are documents. The package installs two components and they read different files: 'Markstrata - Markdown' loads .md, 'Markstrata - HTML' loads .html and .htm. Set this to match what the library holds and what componentId points at - [\".html\", \".htm\"] for an HTML library. Note that Convert-MarkstrataLink and the media commands remain Markdown-only: wiki links and Markdown image syntax are features of Markdown, not of the library.",
+    "documentExtensions": [".md"],
+
     "_mediaFolder": "Folder inside the document library that holds images. Keeping them in the same library is the point: the authoring model is edit-the-markdown-locally, so an image has to live somewhere an author can drop it next to the document. A leading underscore keeps it out of the way - the index generator skips any folder with no .md in it and the publisher only picks up *.md, so _media is invisible to both.",
     "mediaFolder": "_media",
 

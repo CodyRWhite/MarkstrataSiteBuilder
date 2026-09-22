@@ -128,9 +128,10 @@ function Update-MarkstrataNavigation {
         # Every entry points at the single renderer page with a strataDoc query string, so the menu
         # no longer depends on a page per document - which is what lets those pages be retired.
         $libraryUrl = ([string]$config.Markdown.libraryServerRelativeUrl).TrimEnd("/")
+        $documentExtensions = Get-MarkstrataDocumentExtension
         foreach ($item in (Get-PnPListItem -List $config.Markdown.documentLibrary -PageSize 1000)) {
             $leafFile = [string]$item.FieldValues.FileLeafRef
-            if ($leafFile -notlike "*.md") { continue }
+            if (-not (Test-MarkstrataDocumentFile -Name $leafFile -Extension $documentExtensions)) { continue }
 
             $reference = [string]$item.FieldValues.FileRef
             $marker = "$libraryUrl/"

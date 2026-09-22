@@ -492,3 +492,79 @@ function Convert-MarkdownOutsideCode {
 
     return $builder.ToString()
 }
+
+function Get-MarkstrataDocumentExtension {
+    <#
+    .SYNOPSIS
+        The file extensions this library's documents use.
+
+    .DESCRIPTION
+        The package installs two components and they read different files: the Markdown web part
+        loads .md, the HTML one loads .html and .htm. Which a library holds is markdown.
+        documentExtensions, not something inferred from componentId - a library is a folder of
+        files, and what is in it is a fact about the folder rather than about the web part pointed
+        at it.
+
+        Normalised on the way out: lower case, with a leading dot, so config may say "md", ".md" or
+        ".MD" and the comparison still works.
+
+    .OUTPUTS
+        String[] - at least one extension, always lower case and dotted.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+
+    $config = Get-MarkstrataConfig
+    $configured = @(Get-OptionalProperty $config.Markdown "documentExtensions" @(".md"))
+
+    $extensions = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in $configured) {
+        $value = ([string]$entry).Trim().ToLowerInvariant()
+        if (-not $value) { continue }
+        if (-not $value.StartsWith(".")) { $value = ".$value" }
+        if (-not $extensions.Contains($value)) { $extensions.Add($value) }
+    }
+
+    # An empty list would silently match nothing and publish an empty site, which is worse than
+    # carrying on with the default.
+    if ($extensions.Count -eq 0) {
+        Write-MarkstrataLog -Message "markdown.documentExtensions is empty; falling back to .md." -Level Warning -Component "MarkdownPage"
+        $extensions.Add(".md")
+    }
+
+    return $extensions.ToArray()
+}
+
+function Test-MarkstrataDocumentFile {
+    <#
+    .SYNOPSIS
+        Is this file one of the library's documents?
+
+    .DESCRIPTION
+        Replaces the "*.md" tests that were scattered through the walkers. Temporary files and the
+        dot-files an editor leaves behind are never documents, whatever their extension.
+
+    .PARAMETER Name
+        The file's leaf name.
+
+    .PARAMETER Extension
+        The extensions to accept. Hoist Get-MarkstrataDocumentExtension out of a loop and pass it
+        here; omitted, it is read per call.
+
+    .OUTPUTS
+        Boolean.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Name,
+        [string[]]$Extension
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    if ($Name.StartsWith("~$") -or $Name.StartsWith(".")) { return $false }
+
+    if (-not $Extension) { $Extension = Get-MarkstrataDocumentExtension }
+    return ($Extension -contains [System.IO.Path]::GetExtension($Name).ToLowerInvariant())
+}
