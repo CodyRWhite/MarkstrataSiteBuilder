@@ -107,8 +107,12 @@ function Invoke-MarkstrataRefresh {
     # --- 2. Wait for the sync -----------------------------------------------------------------
     # Compare the two sides by relative path. The library is authoritative for publishing, so a
     # mismatch means OneDrive is still working and anything published now would be wrong.
+    $documentExtensions = Get-MarkstrataDocumentExtension
     $localPaths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($file in (Get-ChildItem -LiteralPath $LibraryRoot -Recurse -File -Filter "*.md")) {
+    # -Filter takes one pattern, and a library may hold more than one extension, so the filtering
+    # happens here rather than in the provider.
+    foreach ($file in (Get-ChildItem -LiteralPath $LibraryRoot -Recurse -File |
+            Where-Object { Test-MarkstrataDocumentFile -Name $_.Name -Extension $documentExtensions })) {
         $relative = $file.FullName.Substring($LibraryRoot.Length).TrimStart("\", "/") -replace "\\", "/"
         [void]$localPaths.Add($relative)
     }
@@ -124,7 +128,7 @@ function Invoke-MarkstrataRefresh {
         $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($item in (Get-PnPListItem -List $config.Markdown.documentLibrary -PageSize 1000 -ErrorAction SilentlyContinue)) {
             $leaf = [string]$item.FieldValues.FileLeafRef
-            if ($leaf -notlike "*.md") { continue }
+            if (-not (Test-MarkstrataDocumentFile -Name $leaf -Extension $documentExtensions)) { continue }
             $reference = [string]$item.FieldValues.FileRef
             $marker = "/$librarySiteRelative/"
             $markerIndex = $reference.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase)

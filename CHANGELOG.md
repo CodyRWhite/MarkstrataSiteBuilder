@@ -4,6 +4,28 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-09-22
+
+### Added
+- **`markdown.documentExtensions`, so a library can hold `.html` documents.** The two installed
+  components read different files - the Markdown web part loads `.md`, the HTML one `.html` and
+  `.htm` - and this module tested for `"*.md"` in four separate places, so an HTML library published
+  nothing at all. The publish walk, the navigation walk, the refresh sync comparison and the
+  readiness check now all follow the configured set.
+
+  It is a fact about the library rather than something inferred from `componentId`: a library is a
+  folder of files, and what is in it is a property of the folder.
+- **An "Index naming" readiness check.** `markdownIndex.indexFileName` and `homeFileName` have to end
+  in one of `documentExtensions`, or the generated indexes are published and then not recognised as
+  indexes - so they are titled and ordered as ordinary documents and the category headings go
+  missing. Silent, and awkward to diagnose after the fact.
+
+### Notes
+- `Convert-MarkstrataLink` and the media commands remain Markdown-only, deliberately: wiki links and
+  Markdown image syntax are features of Markdown rather than of the library.
+- Generated index screens are still written as Markdown whatever the library holds. An HTML library
+  publishes and gets a menu, but its indexes are not yet emitted as HTML.
+
 ## [1.4.0] - 2026-09-22
 
 ### Changed

@@ -135,6 +135,9 @@ function Publish-MarkstrataLibrary {
     $pending = [System.Collections.Generic.Queue[string]]::new()
     $pending.Enqueue($startUrl)
 
+    # Hoisted: what counts as a document is a config read, not a per-file decision.
+    $documentExtensions = Get-MarkstrataDocumentExtension
+
     while ($pending.Count -gt 0) {
         $currentUrl = $pending.Dequeue()
         $relativeFolder = $currentUrl.Substring([Math]::Min($currentUrl.Length, $librarySiteRelative.Length)).Trim("/")
@@ -148,8 +151,7 @@ function Publish-MarkstrataLibrary {
         }
 
         foreach ($file in $files) {
-            if ($file.Name -notlike "*.md") { continue }
-            if ($file.Name.StartsWith("~$") -or $file.Name.StartsWith(".")) { continue }
+            if (-not (Test-MarkstrataDocumentFile -Name $file.Name -Extension $documentExtensions)) { continue }
             $documents.Add([pscustomobject]@{
                 Name   = [string]$file.Name
                 Folder = $relativeFolder
